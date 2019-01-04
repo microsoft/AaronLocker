@@ -1,0 +1,11 @@
+﻿TOPIC
+	about_AaronLocker
+	
+SHORT DESCRIPTION
+	Explains how to use the AaronLocker powershell module
+	
+LONG DESCRIPTION
+	<Insert Content here>
+
+KEYWORDS
+	AaronLocker

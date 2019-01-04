@@ -1,0 +1,4 @@
+﻿# List all files that are loaded in the postimport.ps1
+# In the order they are loaded during postimport
+
+bin\types.ps1

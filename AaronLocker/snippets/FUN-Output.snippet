@@ -1,0 +1,66 @@
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>FUN-Output</Title>
+			<Shortcut></Shortcut>
+			<Author>Friedrich Weinmann</Author>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="True">
+					<ID>name</ID>
+					<ToolTip>Name of the function</ToolTip>
+					<Function></Function>
+					<Default>name</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="PowerShell">
+				<![CDATA[function $name$
+{
+	[CmdletBinding(DefaultParameterSetName = 'name')]
+	Param (
+		[Parameter(ParameterSetName = 'name')]
+		[string]
+		$PolicyName,
+		
+		[Parameter(Mandatory = $true, ValueFromPipeline = $true, ParameterSetName = 'policy')]
+		[AaronLocker.Policy[]]
+		$Policy
+	)
+	
+	begin
+	{
+		if ($PSCmdlet.ParameterSetName -eq 'name')
+		{
+			try { $PolicyName = Resolve-ALPolicy -PolicyName $PolicyName }
+			catch { Write-ALError -ErrorRecord $_ -Terminate }
+		}
+	}
+	process
+	{
+		#region Process by name
+		if ($PolicyName)
+		{
+			
+		}
+		#endregion Process by name
+		
+		#region Process by object
+		foreach ($policyObject in $Policy)
+		{
+			
+		}
+		#endregion Process by object
+	}
+	end
+	{
+	
+	}
+}]]>
+			</Code>
+		</Snippet>
+	</CodeSnippet>
+</CodeSnippets>

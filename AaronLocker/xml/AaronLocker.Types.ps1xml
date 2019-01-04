@@ -1,0 +1,212 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Types>
+  <!-- AaronLocker.HashRule -->
+  <Type>
+    <Name>Deserialized.AaronLocker.HashRule</Name>
+    <Members>
+      <MemberSet>
+        <Name>PSStandardMembers</Name>
+        <Members>
+          <NoteProperty>
+            <Name>
+              TargetTypeForDeserialization
+            </Name>
+            <Value>
+              AaronLocker.HashRule
+            </Value>
+          </NoteProperty>
+        </Members>
+      </MemberSet>
+    </Members>
+  </Type>
+  <Type>
+    <Name>AaronLocker.HashRule</Name>
+    <Members>
+      <CodeProperty IsHidden="true">
+        <Name>SerializationData</Name>
+        <GetCodeReference>
+          <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+          <MethodName>GetSerializationData</MethodName>
+        </GetCodeReference>
+      </CodeProperty>
+    </Members>
+    <TypeConverter>
+      <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+    </TypeConverter>
+  </Type>
+
+  <!-- AaronLocker.PathRule -->
+  <Type>
+    <Name>Deserialized.AaronLocker.PathRule</Name>
+    <Members>
+      <MemberSet>
+        <Name>PSStandardMembers</Name>
+        <Members>
+          <NoteProperty>
+            <Name>
+              TargetTypeForDeserialization
+            </Name>
+            <Value>
+              AaronLocker.PathRule
+            </Value>
+          </NoteProperty>
+        </Members>
+      </MemberSet>
+    </Members>
+  </Type>
+  <Type>
+    <Name>AaronLocker.PathRule</Name>
+    <Members>
+      <CodeProperty IsHidden="true">
+        <Name>SerializationData</Name>
+        <GetCodeReference>
+          <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+          <MethodName>GetSerializationData</MethodName>
+        </GetCodeReference>
+      </CodeProperty>
+    </Members>
+    <TypeConverter>
+      <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+    </TypeConverter>
+  </Type>
+	
+  <!-- AaronLocker.Policy -->
+  <Type>
+    <Name>Deserialized.AaronLocker.Policy</Name>
+    <Members>
+      <MemberSet>
+        <Name>PSStandardMembers</Name>
+        <Members>
+          <NoteProperty>
+            <Name>
+              TargetTypeForDeserialization
+            </Name>
+            <Value>
+              AaronLocker.Policy
+            </Value>
+          </NoteProperty>
+        </Members>
+      </MemberSet>
+    </Members>
+  </Type>
+  <Type>
+    <Name>AaronLocker.Policy</Name>
+    <Members>
+      <CodeProperty IsHidden="true">
+        <Name>SerializationData</Name>
+        <GetCodeReference>
+          <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+          <MethodName>GetSerializationData</MethodName>
+        </GetCodeReference>
+      </CodeProperty>
+    </Members>
+    <TypeConverter>
+      <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+    </TypeConverter>
+  </Type>
+  
+  <!-- AaronLocker.PublisherRule -->
+  <Type>
+    <Name>Deserialized.AaronLocker.PublisherRule</Name>
+    <Members>
+      <MemberSet>
+        <Name>PSStandardMembers</Name>
+        <Members>
+          <NoteProperty>
+            <Name>
+              TargetTypeForDeserialization
+            </Name>
+            <Value>
+              AaronLocker.PublisherRule
+            </Value>
+          </NoteProperty>
+        </Members>
+      </MemberSet>
+    </Members>
+  </Type>
+  <Type>
+    <Name>AaronLocker.PublisherRule</Name>
+    <Members>
+      <CodeProperty IsHidden="true">
+        <Name>SerializationData</Name>
+        <GetCodeReference>
+          <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+          <MethodName>GetSerializationData</MethodName>
+        </GetCodeReference>
+      </CodeProperty>
+    </Members>
+    <TypeConverter>
+      <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+    </TypeConverter>
+  </Type>
+  
+  <!-- AaronLocker.RuleFailure -->
+  <Type>
+    <Name>Deserialized.AaronLocker.RuleFailure</Name>
+    <Members>
+      <MemberSet>
+        <Name>PSStandardMembers</Name>
+        <Members>
+          <NoteProperty>
+            <Name>
+              TargetTypeForDeserialization
+            </Name>
+            <Value>
+              AaronLocker.RuleFailure
+            </Value>
+          </NoteProperty>
+        </Members>
+      </MemberSet>
+    </Members>
+  </Type>
+  <Type>
+    <Name>AaronLocker.RuleFailure</Name>
+    <Members>
+      <CodeProperty IsHidden="true">
+        <Name>SerializationData</Name>
+        <GetCodeReference>
+          <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+          <MethodName>GetSerializationData</MethodName>
+        </GetCodeReference>
+      </CodeProperty>
+    </Members>
+    <TypeConverter>
+      <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+    </TypeConverter>
+  </Type>
+
+  <!-- AaronLocker.SourcePathRule -->
+  <Type>
+    <Name>Deserialized.AaronLocker.SourcePathRule</Name>
+    <Members>
+      <MemberSet>
+        <Name>PSStandardMembers</Name>
+        <Members>
+          <NoteProperty>
+            <Name>
+              TargetTypeForDeserialization
+            </Name>
+            <Value>
+              AaronLocker.SourcePathRule
+            </Value>
+          </NoteProperty>
+        </Members>
+      </MemberSet>
+    </Members>
+  </Type>
+  <Type>
+    <Name>AaronLocker.SourcePathRule</Name>
+    <Members>
+      <CodeProperty IsHidden="true">
+        <Name>SerializationData</Name>
+        <GetCodeReference>
+          <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+          <MethodName>GetSerializationData</MethodName>
+        </GetCodeReference>
+      </CodeProperty>
+    </Members>
+    <TypeConverter>
+      <TypeName>AaronLocker.SerializationTypeConverter</TypeName>
+    </TypeConverter>
+  </Type>
+</Types>

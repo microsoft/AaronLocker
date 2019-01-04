@@ -1,0 +1,471 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>AaronLocker</name>
+    </assembly>
+    <members>
+        <member name="T:AaronLocker.Action">
+            <summary>
+            Whether to permit or deny execution in a given rule
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Action.Allow">
+            <summary>
+            Allow execution
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Action.Deny">
+            <summary>
+            Deny execution
+            </summary>
+        </member>
+        <member name="T:AaronLocker.EnforcementMode">
+            <summary>
+            Whether a policy should be enforced
+            </summary>
+        </member>
+        <member name="F:AaronLocker.EnforcementMode.NotConfigured">
+            <summary>
+            The policy has yet to be configured
+            </summary>
+        </member>
+        <member name="F:AaronLocker.EnforcementMode.AuditOnly">
+            <summary>
+            The policy is designed for audit only
+            </summary>
+        </member>
+        <member name="F:AaronLocker.EnforcementMode.Enabled">
+            <summary>
+            The policy will be enforced
+            </summary>
+        </member>
+        <member name="T:AaronLocker.HashRule">
+            <summary>
+            A rule to apply based on hash values
+            </summary>
+        </member>
+        <member name="F:AaronLocker.HashRule.HashValue">
+            <summary>
+            The hash value to apply the rule by
+            </summary>
+        </member>
+        <member name="F:AaronLocker.HashRule.FileName">
+            <summary>
+            The name of the actual file the hash targets
+            </summary>
+        </member>
+        <member name="F:AaronLocker.HashRule.SourceFileLength">
+            <summary>
+            The original input file's length
+            </summary>
+        </member>
+        <member name="M:AaronLocker.HashRule.AddToPolicy(System.Xml.XmlDocument,AaronLocker.Policy)">
+            <summary>
+            Attach rule to policy
+            </summary>
+            <param name="Document">The AppLocker policy to integrate into.</param>
+            <param name="Policy">The policy object that calls for this integration.</param>
+        </member>
+        <member name="M:AaronLocker.HashRule.Clone">
+            <inheritdoc />
+        </member>
+        <member name="T:AaronLocker.PathRule">
+            <summary>
+            A rule enforcing compliance based on path.
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PathRule.Path">
+            <summary>
+            The path to which to apply this rule
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PathRule.Exceptions">
+            <summary>
+            Items or folders under the path to exclude from this rule
+            </summary>
+        </member>
+        <member name="M:AaronLocker.PathRule.AddToPolicy(System.Xml.XmlDocument,AaronLocker.Policy)">
+            <summary>
+            Attach rule to policy
+            </summary>
+            <param name="Document">The AppLocker policy to integrate into.</param>
+            <param name="Policy">The policy object that calls for this integration.</param>
+        </member>
+        <member name="M:AaronLocker.PathRule.Clone">
+            <inheritdoc />
+        </member>
+        <member name="T:AaronLocker.Policy">
+            <summary>
+            An AppLocker policy, containing rules and offering tools to convert / integrate into output generation.
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Policy.Rules">
+            <summary>
+            List of all rules that are part of this policy
+            </summary>
+        </member>
+        <member name="P:AaronLocker.Policy.RulesCount">
+            <summary>
+            Number of rules stored in the policy
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Policy.Name">
+            <summary>
+            An arbitrary name for this policy. Internal use only, to help distinguishing between different policies.
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Policy.Description">
+            <summary>
+            Add a neat description, telling your future self what this was all about
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Policy.LastUpdate">
+            <summary>
+            When was the last update to the policy
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Policy.FailedRules">
+            <summary>
+            List of rules that failed to execute during the last compilation effort
+            </summary>
+        </member>
+        <member name="M:AaronLocker.Policy.GetXml(AaronLocker.EnforcementMode)">
+            <summary>
+            Returns XML string of the finished AppLocker policy
+            </summary>
+            <param name="EnforcementMode">How the policy should be enforced</param>
+            <returns>XML Text</returns>
+        </member>
+        <member name="T:AaronLocker.PublisherRule">
+            <summary>
+            Rule acting based on publisher that signed a file.
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PublisherRule.PublisherName">
+            <summary>
+            The name of the publisher
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PublisherRule.ProductName">
+            <summary>
+            Name of the product
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PublisherRule.BinaryName">
+            <summary>
+            Name of the file
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PublisherRule.MinimumVersion">
+            <summary>
+            Minimum version to apply this to
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PublisherRule.MaximumVersion">
+            <summary>
+            Last version to apply this rule to.
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PublisherRule.Exemplar">
+            <summary>
+            Path to an exampel file to use to generate publisher information
+            </summary>
+        </member>
+        <member name="F:AaronLocker.PublisherRule.UseProduct">
+            <summary>
+            Whether to also use the product information, when recording from an example file.
+            </summary>
+        </member>
+        <member name="M:AaronLocker.PublisherRule.Resolve">
+            <summary>
+            Resolves an Exemplar into the publisher rule relevant data
+            </summary>
+        </member>
+        <member name="M:AaronLocker.PublisherRule.AddToPolicy(System.Xml.XmlDocument,AaronLocker.Policy)">
+            <summary>
+            Attach rule to policy
+            </summary>
+            <param name="Document">The AppLocker policy to integrate into.</param>
+            <param name="Policy">The policy object that calls for this integration.</param>
+        </member>
+        <member name="M:AaronLocker.PublisherRule.Clone">
+            <inheritdoc />
+        </member>
+        <member name="T:AaronLocker.RuleBase">
+            <summary>
+            Base class for AppLocker rules
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleBase.Label">
+            <summary>
+            The name of the rule
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleBase.Description">
+            <summary>
+            A description of what this rule is all about
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleBase.UserOrGroupSid">
+            <summary>
+            Group or user the rule applies to
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleBase.Id">
+            <summary>
+            An ID of the rule. Leave this empty, if you do not want to hardcode a specific GUid for a specific rule.
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleBase.Collection">
+            <summary>
+            What scope does the rule apply to (specifically: Is it designed to affect dlls, executables or scripts).
+            </summary>
+        </member>
+        <member name="P:AaronLocker.RuleBase.Type">
+            <summary>
+            What kind of rule is this?
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleBase.Action">
+            <summary>
+            Whether to allow (Whitelist) or deny (Blacklist) the target of this rule
+            </summary>
+        </member>
+        <member name="M:AaronLocker.RuleBase.AddToPolicy(System.Xml.XmlDocument,AaronLocker.Policy)">
+            <summary>
+            Each rule must be able to attach itself to an XML document representing an AppLocker rule.
+            </summary>
+            <param name="Document">The AppLocker policy to integrate into.</param>
+            <param name="Policy">The policy object that calls for this integration.</param>
+        </member>
+        <member name="M:AaronLocker.RuleBase.Clone">
+            <summary>
+            Clones the current rule
+            </summary>
+        </member>
+        <member name="M:AaronLocker.RuleBase.CopyBaseProperties(AaronLocker.RuleBase)">
+            <summary>
+            Copies the base properties of a rule object. Used by Clone() implementations.
+            </summary>
+            <param name="Target">The object to copy properties into.</param>
+        </member>
+        <member name="T:AaronLocker.RuleFailure">
+            <summary>
+            Class representing a rule that failed to properly resolve.
+            Used when resolving rules from a Policy object.
+            </summary>
+        </member>
+        <member name="P:AaronLocker.RuleFailure.Type">
+            <summary>
+            The type of rule it was
+            </summary>
+        </member>
+        <member name="P:AaronLocker.RuleFailure.Label">
+            <summary>
+            The label the rule was meant to carry
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleFailure.Rule">
+            <summary>
+            The source rule object
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleFailure.Error">
+            <summary>
+            The actual exception that prevented success
+            </summary>
+        </member>
+        <member name="M:AaronLocker.RuleFailure.#ctor">
+            <summary>
+            Creates an empty rule failure
+            </summary>
+        </member>
+        <member name="M:AaronLocker.RuleFailure.#ctor(AaronLocker.RuleBase,System.Exception)">
+            <summary>
+            Creates a preconfigured rule failure
+            </summary>
+            <param name="Rule">The rule that failed</param>
+            <param name="Error">The exception describing the failure</param>
+        </member>
+        <member name="T:AaronLocker.RuleType">
+            <summary>
+            The kind of rule a rule is
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleType.Publisher">
+            <summary>
+            A rule based on controlling execution of files signed by a specific publisher
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleType.Hash">
+            <summary>
+            A rule that controls execution based on a specific file hash
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleType.Path">
+            <summary>
+            A rule controlling execution based on path content is executed from
+            </summary>
+        </member>
+        <member name="F:AaronLocker.RuleType.SourcePath">
+            <summary>
+            A temporary rule that will be converted into regular rules when realized.
+            </summary>
+        </member>
+        <member name="T:AaronLocker.Scope">
+            <summary>
+            The various rule scope types available in an AaronLocker based Applocker Rule
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Scope.Exe">
+            <summary>
+            The rule applies to executables
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Scope.Dll">
+            <summary>
+            The rule applies to Dynamic Link Libraries
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Scope.Script">
+            <summary>
+            The rule applies to script files
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Scope.Default">
+            <summary>
+            The default package applies to executables, dlls and script files
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Scope.Msi">
+            <summary>
+            The rule applies to installer files
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Scope.AppX">
+            <summary>
+            The rule applies to AppX UWP Apps
+            </summary>
+        </member>
+        <member name="F:AaronLocker.Scope.All">
+            <summary>
+            The rule applies to all types of files
+            </summary>
+        </member>
+        <member name="T:AaronLocker.SerializationTypeConverter">
+            <summary>
+            Typeconverter that does the heavy lifting of maintaining type integrity across process borders.
+            </summary>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.CanConvertFrom(System.Object,System.Type)">
+            <summary>
+            Whether the source can be converted to its destination
+            </summary>
+            <param name="sourceValue">The value to convert</param>
+            <param name="destinationType">The type to convert to</param>
+            <returns>Whether this action is possible</returns>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.ConvertFrom(System.Object,System.Type,System.IFormatProvider,System.Boolean)">
+            <summary>
+            Converts an object
+            </summary>
+            <param name="sourceValue">The data to convert</param>
+            <param name="destinationType">The type to convert to</param>
+            <param name="formatProvider">This will be ignored, but must be present</param>
+            <param name="ignoreCase">This will be ignored, but must be present</param>
+            <returns>The converted object</returns>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.CanConvertTo(System.Object,System.Type)">
+            <summary>
+            Whether the input object can be converted to the Destination type
+            </summary>
+            <param name="sourceValue">Input value</param>
+            <param name="destinationType">The type to convert to</param>
+            <returns></returns>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.ConvertTo(System.Object,System.Type,System.IFormatProvider,System.Boolean)">
+            <summary>
+            Converts an object
+            </summary>
+            <param name="sourceValue">The data to convert</param>
+            <param name="destinationType">The type to convert to</param>
+            <param name="formatProvider">This will be ignored, but must be present</param>
+            <param name="ignoreCase">This will be ignored, but must be present</param>
+            <returns>The converted object</returns>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.RegisterAssemblyResolver">
+            <summary>
+            Registers an assembly resolving event
+            </summary>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.CanSerialize(System.Object)">
+            <summary>
+            Whether an object can be serialized
+            </summary>
+            <param name="obj">The object to test</param>
+            <returns>Whether the object can be serialized</returns>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.CanSerialize(System.Type)">
+            <summary>
+            Whether a type can be serialized
+            </summary>
+            <param name="type">The type to test</param>
+            <returns>Whether the specified type can be serialized</returns>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.TypeIsSerializable(System.Type)">
+            <summary>
+            The validation check on whether a type is serializable
+            </summary>
+            <param name="type">The type to test</param>
+            <returns>Returns whether that type can be serialized</returns>
+        </member>
+        <member name="M:AaronLocker.SerializationTypeConverter.GetSerializationData(System.Management.Automation.PSObject)">
+            <summary>
+            Used to obtain the information to write
+            </summary>
+            <param name="psObject">The object to dissect</param>
+            <returns>A memory stream.</returns>
+        </member>
+        <member name="T:AaronLocker.SourcePathRule">
+            <summary>
+            A rule based on a source file, can be converted to the most constrained rule object type.
+            </summary>
+        </member>
+        <member name="F:AaronLocker.SourcePathRule.Path">
+            <summary>
+            The path to the item
+            </summary>
+        </member>
+        <member name="F:AaronLocker.SourcePathRule.Recurse">
+            <summary>
+            Whether the specified path should be resolved recursively
+            </summary>
+        </member>
+        <member name="F:AaronLocker.SourcePathRule.EnforceMinimumVersion">
+            <summary>
+            Whether the found version of a product should be enforced, if the rule resolves into a Publisher Rule.
+            </summary>
+        </member>
+        <member name="M:AaronLocker.SourcePathRule.Resolve">
+            <summary>
+            Processes the path specified and generates rules based on it.
+            </summary>
+            <returns>Rules that are as restrictive as possible</returns>
+        </member>
+        <member name="F:AaronLocker.SourcePathRule.ResolutionScript">
+            <summary>
+            Scriptblock used to resolve the specified path into rule objects
+            </summary>
+        </member>
+        <member name="M:AaronLocker.SourcePathRule.AddToPolicy(System.Xml.XmlDocument,AaronLocker.Policy)">
+            <summary>
+            Attach rule to policy
+            </summary>
+            <param name="Document">The AppLocker policy to integrate into.</param>
+            <param name="Policy">The policy object that calls for this integration.</param>
+        </member>
+        <member name="M:AaronLocker.SourcePathRule.Clone">
+            <inheritdoc />
+        </member>
+    </members>
+</doc>
