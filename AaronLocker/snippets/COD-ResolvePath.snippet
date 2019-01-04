@@ -1,0 +1,18 @@
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>COD-ResolvePath</Title>
+			<Shortcut></Shortcut>
+			<Author>Friedrich Weinmann</Author>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Code Language="PowerShell">
+				<![CDATA[try { $resolvedPath = Resolve-ALPath -Path $Path -Provider FileSystem -SingleItem }
+catch { Write-ALError -ErrorRecord $_ -Terminate }]]>
+			</Code>
+		</Snippet>
+	</CodeSnippet>
+</CodeSnippets>
