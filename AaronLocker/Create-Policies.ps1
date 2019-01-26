@@ -814,6 +814,32 @@ else
 }
 
 ####################################################################################################
+# Tag with timestamp into the rule set
+####################################################################################################
+
+# Define an AppLocker policy to fill containing a bogus hash rule containing timestamp information
+$timestampXml = [xml]@"
+    <AppLockerPolicy Version="1">
+      <RuleCollection Type="Exe" EnforcementMode="NotConfigured">
+        <FileHashRule Name="Rule set created $strRuleDocTimestamp" Description="Never-applicable rule to document that this AppLocker rule set was created via AaronLocker at $strRuleDocTimestamp" UserOrGroupSid="S-1-3-0" Action="Deny" Id="456bd77c-5528-4a93-8ab8-51c6b950c541">
+            <Conditions>
+              <FileHashCondition>
+                <FileHash Type="SHA256" Data="0x0000000000000000000000000000000000000000000000000000000000000001" SourceFileName="DateTimeInfo $strFnameTimestamp" SourceFileLength="1"/>
+              </FileHashCondition>
+            </Conditions>
+        </FileHashRule>
+      </RuleCollection>
+      <RuleCollection Type="Dll" EnforcementMode="NotConfigured"/>
+      <RuleCollection Type="Script" EnforcementMode="NotConfigured"/>
+      <RuleCollection Type="Msi" EnforcementMode="NotConfigured"/>
+    </AppLockerPolicy>
+"@
+
+$timestampFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "TimestampData.xml")
+# Save XML as Unicode
+SaveXmlDocAsUnicode -xmlDoc $timestampXml -xmlFilename $timestampFile
+
+####################################################################################################
 # Merging custom rules
 ####################################################################################################
 
@@ -830,6 +856,9 @@ Get-ChildItem $mergeRulesDynamicDir\*.xml, $mergeRulesStaticDir\*.xml | foreach 
     $policyToMerge = [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.AppLockerPolicy]::Load($policyFileToMerge)
     $masterPolicy.Merge($policyToMerge)
 }
+
+# Delete the timestamp file so that it never gets copied accidentally to the MergeRules-Static directory
+Remove-Item $timestampFile
 
 #TODO: Optimize rules in rule collections here - combine/remove redundant/overlapping rules
 

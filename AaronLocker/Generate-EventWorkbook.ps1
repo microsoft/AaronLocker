@@ -83,6 +83,7 @@ if (CreateExcelApplication)
     $text += "Number of signed-file events:`t" + $eventsSigned.Count.ToString()
     $text += "Number of unsigned-file events:`t" + $eventsUnsigned.Count.ToString()
     # Make sure the result of the pipe is an array, even if only one item.
+    #TODO: Could also do this as ($dataUnfiltered | Select-Object MachineName -Unique).Count
     $text += "Number of machines reporting events:`t" + ( @() + ($dataUnfiltered.MachineName | Group-Object)).Count.ToString()
     AddWorksheetFromText -text $text -tabname $tabname
 

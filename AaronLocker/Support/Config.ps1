@@ -64,12 +64,14 @@ $ps1_ExportPolicyToExcel                     = [System.IO.Path]::Combine($rootDi
 # Example filenames:
 #    AppLockerRules-20180518-1151-Audit.xml
 #    AppLockerRules-20180518-1151-Enforce.xml
-$strTimestamp = [datetime]::Now.ToString("yyyyMMdd-HHmm")
+$dtNow = [datetime]::Now
+$strRuleDocTimestamp = $dtNow.ToString("yyyy-MM-dd HH:mm")
+$strFnameTimestamp = $dtNow.ToString("yyyyMMdd-HHmm")
 $rulesFileBase = "AppLockerRules-"
 $rulesFileAuditSuffix = "-Audit.xml"
 $rulesFileEnforceSuffix = "-Enforce.xml"
-$rulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strTimestamp + $rulesFileAuditSuffix)
-$rulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strTimestamp + $rulesFileEnforceSuffix)
+$rulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileAuditSuffix)
+$rulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileEnforceSuffix)
 # Get latest audit and enforce policy files, or $null if none found.
 function RulesFileAuditLatest()
 {
