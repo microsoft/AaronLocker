@@ -87,11 +87,12 @@ PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
 # Uncomment this block if Google Chrome is installed to ProgramFiles.
 # Google Chrome runs some code in the user profile even when Chrome is installed to Program Files.
 # This creates publisher rules that allow those components to run.
+# Note that PublisherName used to be "O=GOOGLE INC, L=MOUNTAIN VIEW, S=CALIFORNIA, C=US"
 <#
     @{
     label = "Google Chrome SWReporter tool";
     RuleCollection = "Exe";
-    PublisherName = "O=GOOGLE INC, L=MOUNTAIN VIEW, S=CALIFORNIA, C=US";
+    PublisherName = "O=GOOGLE LLC, L=MOUNTAIN VIEW, S=CA, C=US";
     ProductName = "SOFTWARE REPORTER TOOL";
     BinaryName = "SOFTWARE_REPORTER_TOOL.EXE";
     }
