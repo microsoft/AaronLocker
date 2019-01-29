@@ -26,6 +26,7 @@ $dotnetProgramsToBlacklist =
     "RegSvcs.exe", 
     "MSBuild.exe",
     "Microsoft.Workflow.Compiler.exe"
+    
 $dotnetProgramsToBlacklist | ForEach-Object {
     Get-ChildItem -Path $env:windir\Microsoft.NET -Recurse -Include $_ | ForEach-Object { $_.FullName }
 }
