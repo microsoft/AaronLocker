@@ -72,6 +72,20 @@ ProductName = "MICROSOFT ONEDRIVE";
 }
 
 @{
+# Allow Microsoft-signed files with the Microsoft Teams product name.
+label = "Microsoft Teams";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "MICROSOFT TEAMS";
+}
+
+@{
+# Allow Microsoft-signed files with the Microsoft Teams Update product name.
+label = "Microsoft Teams Update";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "MICROSOFT TEAMS UPDATE";
+}
+
+@{
 label = "Microsoft-signed MSI files";
 RuleCollection = "Msi";
 PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
