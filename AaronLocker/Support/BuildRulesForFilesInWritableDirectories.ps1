@@ -76,6 +76,11 @@ param(
     [switch]
     $EnforceMinimumVersion,
 
+    # Optional prefix incorporated into each rule name
+    [parameter(Mandatory=$false)]
+    [String]
+    $CustomUserorGroupSid,
+
     # Name of output file
     [parameter(Mandatory=$true)]
     [String]
@@ -84,7 +89,7 @@ param(
     # Optional prefix incorporated into each rule name
     [parameter(Mandatory=$false)]
     [String]
-    $RuleNamePrefix
+    $RuleNamePrefix  
 )
 
 ####################################################################################################
@@ -199,7 +204,8 @@ if ($arrALFI.Length -eq 0)
 foreach($alfi in $arrALFI)
 {
     # Favor publisher rule; hash rule otherwise
-    $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash
+    # if $CustomUserorGroupSid is not empty
+    $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash -User $CustomUserorGroupSid
 
     foreach ($ruleCollection in $pol.RuleCollections)
     {
