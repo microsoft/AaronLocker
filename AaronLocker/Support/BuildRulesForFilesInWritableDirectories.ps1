@@ -79,7 +79,7 @@ param(
     # Optional prefix incorporated into each rule name
     [parameter(Mandatory=$false)]
     [String]
-    $CustomUserorGroupSid,
+    $CustomUserOrGroupSid,
 
     # Name of output file
     [parameter(Mandatory=$true)]
@@ -204,8 +204,13 @@ if ($arrALFI.Length -eq 0)
 foreach($alfi in $arrALFI)
 {
     # Favor publisher rule; hash rule otherwise
-    # if $CustomUserorGroupSid is not empty
-    $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash -User $CustomUserorGroupSid
+    if($CustomUserOrGroupSid){
+        $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash -User $CustomUserOrGroupSid
+    }
+    else{
+        $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash
+    }
+    
 
     foreach ($ruleCollection in $pol.RuleCollections)
     {
