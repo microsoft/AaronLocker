@@ -800,6 +800,8 @@ else
         if ($null -ne $_.noRecurse) { $recurse = !$_.noRecurse }
         $enforceMinFileVersion = $true
         if ($null -ne $_.enforceMinVersion) { $enforceMinFileVersion = $_.enforceMinVersion }
+        $customUserOrGroupSid = "S-1-1-0"
+        if ($null -ne $_.customUserOrGroupSid) { $customUserOrGroupSid = $_.customUserOrGroupSid }
         $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Rules.xml")
         # If it already exists, create a name that doesn't exist yet
         $ixOutfile = [int]2
@@ -809,7 +811,7 @@ else
             $ixOutfile++
         }
         Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
-        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -EnforceMinimumVersion: $enforceMinFileVersion -RuleNamePrefix $label -OutputFileName $outfile
+        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -EnforceMinimumVersion: $enforceMinFileVersion -CustomUserOrGroupSid: $customUserOrGroupSid -RuleNamePrefix $label -OutputFileName $outfile
     }
 }
 

@@ -204,13 +204,7 @@ if ($arrALFI.Length -eq 0)
 foreach($alfi in $arrALFI)
 {
     # Favor publisher rule; hash rule otherwise
-    if($CustomUserOrGroupSid){
-        $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash -User $CustomUserOrGroupSid
-    }
-    else{
-        $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash
-    }
-    
+    $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash -User $CustomUserOrGroupSid
 
     foreach ($ruleCollection in $pol.RuleCollections)
     {

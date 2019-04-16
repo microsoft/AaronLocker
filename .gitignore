@@ -328,3 +328,15 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+AaronLocker/MergeRules-Dynamic/OneDrive Rules.xml
+AaronLocker/MergeRules-Dynamic/TrustedSigners.xml
+AaronLocker/Outputs/AppLockerRules-20190416-1250-Audit.xml
+AaronLocker/Outputs/AppLockerRules-20190416-1250-Enforce.xml
+AaronLocker/ScanResults/Writable_Full_PF.xml
+AaronLocker/ScanResults/Writable_Full_PF86.xml
+AaronLocker/ScanResults/Writable_Full_windir.xml
+AaronLocker/ScanResults/Writable_PF.txt
+AaronLocker/ScanResults/Writable_PF86.txt
+AaronLocker/ScanResults/Writable_windir.txt
+AaronLocker/ScanResults/ExeBlacklistData.txt
+.vscode/launch.json
