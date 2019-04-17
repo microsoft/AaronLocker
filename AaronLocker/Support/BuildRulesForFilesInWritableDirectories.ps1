@@ -157,13 +157,23 @@ foreach($fsp in $FileSystemPaths)
                 # Get-AppLockerFileInformation -Directory inspects files with these extensions:
                 # .com, .exe, .dll, .ocx, .msi, .msp, .mst, .bat, .cmd, .js, .ps1, .vbs, .appx
                 # But this script drops .msi, .msp, .mst, and .appx
+                [array]$scanFileTypes = @('*.bat','*.com','*.exe','*.dll','*.ocx','*.js','*.ps1','*.pyd','*.vbs','*.xll')
+
                 if ($RecurseDirectories)
                 {
-                    $arrALFI += Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp -Recurse
+                    $files += Get-ChildItem * -Path $fsp -File -Force -Recurse -Include $scanFileTypes
+                    for ($i = 0; $i -lt $files.Count; $i++)
+                    {   
+                        $arrALFI += Get-AppLockerFileInformation -Path $files[$i].FullName
+                    }
                 }
                 else
                 {
-                    $arrALFI += Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp
+                    $files += Get-ChildItem * -Path $fsp -File -Force -Include $scanFileTypes
+                    for ($i = 0; $i -lt $files.Count; $i++)
+                    {   
+                        $arrALFI += Get-AppLockerFileInformation -Path $files[$i].FullName
+                    }
                 }
             }
             elseif ($fspInfo -is [System.IO.FileInfo])
