@@ -48,6 +48,7 @@ Examples of valid hash tables:
 label = "OneDrive";
 paths = "$env:LOCALAPPDATA\Microsoft\OneDrive";
 enforceMinVersion = $false;
+customUserOrGroupSid = "S-1-5-32-547"
 }
 
 

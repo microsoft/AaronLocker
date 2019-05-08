@@ -414,44 +414,82 @@ $csvExeBlacklistData | foreach {
 # Remove the placeholder element
 $xExcepts.RemoveChild($xPlaceholder) | Out-Null
 
-Write-Host "Processing additional safe paths to whitelist..." -ForegroundColor Cyan
-# Get additional whitelisted paths from the script that produces that list and incorporate them into the document
+Write-Host "Processing safe paths to whitelist..." -ForegroundColor Cyan
+# Get whitelisted paths from the script that produces that list and incorporate them into the document
 $PathsToAllow = (& $ps1_GetSafePathsToAllow)
-# Add "allow" for Everyone for Exe, Dll, and Script rules
-$xRuleCollections = $xDocument.SelectNodes("//RuleCollection[@Type='Exe' or @Type='Script' or @Type='Dll']")
-foreach($xRuleCollection in $xRuleCollections)
-{
-    $PathsToAllow | foreach {
-        # If path is an existing directory and doesn't have trailing "\*" appended, fix it so that it does.
-        # If path is a file, don't append \*. If the path ends with \*, no need for further validation.
-        # If it doesn't end with \* but Get-Item can't identify it as a file or a directory, write a warning and accept it as is.
-        $pathToAllow = $_
-        if (!$pathToAllow.EndsWith("\*"))
-        {
-            $pathItem = Get-Item $pathToAllow -Force -ErrorAction SilentlyContinue
-            if ($pathItem -eq $null)
-            {
-                Write-Warning "Cannot verify path $pathItem; adding to rule set as is."
-            }
-            elseif ($pathItem -is [System.IO.DirectoryInfo])
-            {
-                Write-Warning "Appending `"\*`" to rule for $pathToAllow"
-                $pathToAllow = [System.IO.Path]::Combine($pathToAllow, "*")
-            }
-        }
-        $elemRule = $xDocument.CreateElement("FilePathRule")
-        $elemRule.SetAttribute("Action", "Allow")
-        $elemRule.SetAttribute("UserOrGroupSid", "S-1-1-0")
-        $elemRule.SetAttribute("Id", [GUID]::NewGuid().Guid)
-        $elemRule.SetAttribute("Name", "Additional allowed path: " + $pathToAllow)
-        $elemRule.SetAttribute("Description", "Allows Everyone to execute from " + $pathToAllow)
-        $elemConditions = $xDocument.CreateElement("Conditions")
-        $elemCondition = $xDocument.CreateElement("FilePathCondition")
-        $elemCondition.SetAttribute("Path", $pathToAllow)
-        $elemConditions.AppendChild($elemCondition) | Out-Null
-        $elemRule.AppendChild($elemConditions) | Out-Null
-        $xRuleCollection.AppendChild($elemRule) | Out-Null
+
+# Pattern that can be replaced by %LOCALAPPDATA%
+$LocalAppDataPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Local\\"
+# Pattern that can be replaced by %APPDATA%
+$RoamingAppDataPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Roaming\\"
+# Pattern that can be replaced by %USERPROFILE% (after the above already done)
+$UserProfilePattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\"
+# Pattern that can be replaced by %WINDIR%
+$WinDirPattern = "^(%OSDRIVE%|C:)\\Windows\\"
+# Pattern that can be replaced by %SYSTEM32%
+$System32Pattern = "^(%OSDRIVE%\\Windows|C:\\Windows|%WINDIR%)\\System32\\"
+# Pattern that can be replaced by %PROGRAMFILES%
+$ProgramFilesPattern = "^(%OSDRIVE%|C:)\\Program Files(| \(x86\))\\"
+# Pattern that can be replaced by %OSDRIVE%
+$OSDrivePattern = "^C:\\"
+
+$PathsToAllow | ForEach-Object {
+
+    if (-not $_.Label) {
+        # Each hashtable must have a label.
+        Write-Error -Message ("Invalid syntax in $ps1_GetSafePathsToAllow. No `"Label`" specified.")
     }
+    if (-not $_.Path) {
+        # Each hashtable must have a path
+        Write-Error -Message ("Invalid syntax in $ps1_GetSafePathsToAllow. No `"Path`" specified.")
+    }
+
+    $GenericPath = (((((($_.Path `
+        -ireplace $LocalAppDataPattern,"%LOCALAPPDATA%\") `
+        -ireplace $RoamingAppDataPattern, "%APPDATA%\") `
+        -ireplace $UserProfilePattern, "%USERPROFILE%\") `
+        -ireplace $System32Pattern, "%SYSTEM32%\") `
+        -ireplace $WinDirPattern, "%WINDIR%\") `
+        -ireplace $ProgramFilesPattern, "%PROGRAMFILES%\") `
+        -ireplace $OSDrivePattern, "%OSDRIVE%\"
+
+    $RulePath = (($GenericPath `
+        -replace "^%LOCALAPPDATA%\\","%OSDRIVE%\Users\*\AppData\Local\") `
+        -replace "^%APPDATA%\\","%OSDRIVE%\Users\*\AppData\Roaming\") `
+        -replace "^%USERPROFILE%\\","%OSDRIVE%\Users\*\"
+
+    $RuleName = "{0}: Path rule for {1}" -f  $_.Label, $GenericPath
+    Write-Host ("`t" + $RuleName) -ForegroundColor Cyan
+
+    $elemRule = $xDocument.CreateElement("FilePathRule")
+    $elemRule.SetAttribute("Action", "Allow")
+    $elemRule.SetAttribute("UserOrGroupSid", "S-1-1-0")
+    $elemRule.SetAttribute("Id", [GUID]::NewGuid().Guid)
+    $elemRule.SetAttribute("Name", $RuleName)
+    $elemRule.SetAttribute("Description", "Allows Everyone to execute from " + $RulePath)
+    $elemConditions = $xDocument.CreateElement("Conditions")
+    $elemCondition = $xDocument.CreateElement("FilePathCondition")
+    $elemCondition.SetAttribute("Path", $RulePath)
+    $elemConditions.AppendChild($elemCondition) | Out-Null
+    $elemRule.AppendChild($elemConditions) | Out-Null
+
+    if ($_.RuleCollection) {
+        $CollectionNode = $xDocument.SelectSingleNode("//RuleCollection[@Type='$($_.RuleCollection)']")
+        if ($CollectionNode -eq $null) {
+            Write-Warning ("Couldn't find RuleCollection Type = " + $_.RuleCollection + " (RuleCollection is case-sensitive)")
+        } else {
+            $elemRule.Id = [string]([GUID]::NewGuid().Guid)
+            $CollectionNode.AppendChild($elemRule) | Out-Null
+        }
+    } else {
+        # Add to Exe, Dll, and Script rules
+        $xDocument.SelectNodes("//RuleCollection[@Type='Exe' or @Type='Script' or @Type='Dll']") | ForEach-Object {
+            $elemRuleCloned = $elemRule.CloneNode($true)
+            $elemRuleCloned.Id = [string]([GUID]::NewGuid().Guid)
+            $_.AppendChild($elemRuleCloned) | Out-Null
+        }
+    }
+
 }
 
 # Incorporate path-exception rules for the user-writable directories under %windir%
@@ -800,6 +838,8 @@ else
         if ($null -ne $_.noRecurse) { $recurse = !$_.noRecurse }
         $enforceMinFileVersion = $true
         if ($null -ne $_.enforceMinVersion) { $enforceMinFileVersion = $_.enforceMinVersion }
+        $customUserOrGroupSid = "S-1-1-0"
+        if ($null -ne $_.customUserOrGroupSid) { $customUserOrGroupSid = $_.customUserOrGroupSid }
         $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Rules.xml")
         # If it already exists, create a name that doesn't exist yet
         $ixOutfile = [int]2
@@ -809,7 +849,7 @@ else
             $ixOutfile++
         }
         Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
-        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -EnforceMinimumVersion: $enforceMinFileVersion -RuleNamePrefix $label -OutputFileName $outfile
+        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -EnforceMinimumVersion: $enforceMinFileVersion -CustomUserOrGroupSid: $customUserOrGroupSid -RuleNamePrefix $label -OutputFileName $outfile
     }
 }
 

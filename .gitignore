@@ -328,3 +328,9 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+AaronLocker/MergeRules-Dynamic/*.xml
+AaronLocker/Outputs/*.xml
+AaronLocker/ScanResults/*.xml
+AaronLocker/ScanResults/*.txt
+
+.vscode/launch.json
