@@ -10,7 +10,7 @@ in a way to minimize the need to update the rules.
 Broadly speaking, "authorized" means that an administrator put it on the computer, OR created a rule specifically for that item.
 * Supported operating systems include Windows 7 and newer, and Windows Server 2008 R2 and newer.
 * Rules cover EXE, DLL, Script, and MSI; on Windows 8.1 and newer, rules also cover Packaged apps.
-* Allows execution from the Windows and ProgramFiles directories, EXCEPT:
+* Allows non-admin execution from the Windows and ProgramFiles directories, EXCEPT:
     * Identifies user-writable subdirectories and disallows execution from those directories;
     * Disallows execution of programs that run user-supplied code (e.g., mshta.exe);
     * Disallows execution of programs that non-admins rarely need but that malware/ransomware authors are known to use (e.g., cipher.exe);
@@ -22,7 +22,7 @@ AppLocker rule types include path rules, publisher rules, and hash rules.
 Rules allowing execution from "safe" locations are implemented using path rules.
 User-writable subdirectories of the Windows and ProgramFiles directories are identified using Sysinternals AccessChk.exe. Exceptions for those subdirectories are implemented within path rules.
 Exceptions for "dangerous" programs (e.g., mshta.exe, cipher.exe) are generally implemented with publisher rules.
-Rules allowing execution of EXE, DLL, and script files from user-writable directories are implemented with publisher rules when possible, and hash rules otherwise. The publisher rules can optionally specify the current version "and above;" publisher rules always allow files to be updated without needing to update the corresponding rules.
+Rules allowing execution of EXE, DLL, and script files from user-writable directories are implemented with publisher rules when possible, and hash rules otherwise, with options for the granularity of Publisher rules.
 Publisher rules can also be created allowing execution of anything signed by a particular publisher, or a specific product by a particular publisher.
 
 Scanning for user-writable subdirectories of the Windows and ProgramFiles directories can be time-consuming. The script writes results to text files in an intermediate subdirectory. The script runs the scan if those files are not found OR if the -Rescan switch is specified.
@@ -798,18 +798,31 @@ else
         }
         $recurse = $true;
         if ($null -ne $_.noRecurse) { $recurse = !$_.noRecurse }
-        $enforceMinFileVersion = $true
-        if ($null -ne $_.enforceMinVersion) { $enforceMinFileVersion = $_.enforceMinVersion }
-        $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Rules.xml")
-        # If it already exists, create a name that doesn't exist yet
-        $ixOutfile = [int]2
-        while (Test-Path($outfile))
+        $pubruleGranularity = "pubProductBinary"
+        if ($null -ne $_.pubruleGranularity)
         {
-            $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Rules.xml")
+            $pubruleGranularity = $_.pubruleGranularity
+        }
+        elseif ($null -ne $_.enforceMinVersion) # enforceMinVersion not considered if pubruleGranularity explicitly specified
+        {
+            if ($_.enforceMinVersion)
+            {
+                $pubruleGranularity = "pubProdBinVer";
+            }
+        }
+        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Publisher Rules.xml")
+        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Hash Rules.xml")
+        # If either already exists, create a pair of names that don't exist yet
+        # (Just assume that when the rules file doesn't exist that the hash rules file doesn't either)
+        $ixOutfile = [int]2
+        while ((Test-Path($outfilePub)) -or (Test-Path($outfileHash)))
+        {
+            $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
+            $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
             $ixOutfile++
         }
         Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
-        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -EnforceMinimumVersion: $enforceMinFileVersion -RuleNamePrefix $label -OutputFileName $outfile
+        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -PubRuleGranularity $pubruleGranularity -RuleNamePrefix $label -OutputPubFileName $outfilePub -OutputHashFileName $outfileHash
     }
 }
 
@@ -817,14 +830,14 @@ else
 # Tag with timestamp into the rule set
 ####################################################################################################
 
-# Define an AppLocker policy to fill containing a bogus hash rule containing timestamp information
+# Define an AppLocker policy to fill containing a bogus hash rule containing timestamp information; hash contains timestamp, as does name and description
 $timestampXml = [xml]@"
     <AppLockerPolicy Version="1">
       <RuleCollection Type="Exe" EnforcementMode="NotConfigured">
         <FileHashRule Name="Rule set created $strRuleDocTimestamp" Description="Never-applicable rule to document that this AppLocker rule set was created via AaronLocker at $strRuleDocTimestamp" UserOrGroupSid="S-1-3-0" Action="Deny" Id="456bd77c-5528-4a93-8ab8-51c6b950c541">
             <Conditions>
               <FileHashCondition>
-                <FileHash Type="SHA256" Data="0x0000000000000000000000000000000000000000000000000000000000000001" SourceFileName="DateTimeInfo $strFnameTimestamp" SourceFileLength="1"/>
+                <FileHash Type="SHA256" Data="0x00000000000000000000000000000000000000000000000000$strTimestampForHashRule" SourceFileName="DateTimeInfo" SourceFileLength="1"/>
               </FileHashCondition>
             </Conditions>
         </FileHashRule>

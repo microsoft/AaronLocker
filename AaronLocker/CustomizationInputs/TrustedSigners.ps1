@@ -63,13 +63,6 @@ Examples showing possible combinations:
     }
 #>
 
-@{
-# Allow Microsoft-signed OneDrive EXE and DLL files with the OneDrive product name; 
-# This rule doesn't cover all of OneDrive's files because they include files from other products (Visual Studio, QT5, etc.)
-label = "Microsoft OneDrive (partial)";
-PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
-ProductName = "MICROSOFT ONEDRIVE";
-}
 
 @{
 # Allow Microsoft-signed files with the Microsoft Teams product name.
