@@ -67,6 +67,7 @@ $ps1_ExportPolicyToExcel                     = [System.IO.Path]::Combine($rootDi
 $dtNow = [datetime]::Now
 $strRuleDocTimestamp = $dtNow.ToString("yyyy-MM-dd HH:mm")
 $strFnameTimestamp = $dtNow.ToString("yyyyMMdd-HHmm")
+$strTimestampForHashRule = $dtNow.ToString("yyyyMMddHHmmss")
 $rulesFileBase = "AppLockerRules-"
 $rulesFileAuditSuffix = "-Audit.xml"
 $rulesFileEnforceSuffix = "-Enforce.xml"

@@ -31,6 +31,7 @@ Use the -WarningOnly, -ErrorOnly, -Allowed, or -AllEvents switches to retrieve e
 Use the -ExeAndDllOnly or -MsiAndScriptOnly switches to retrieve events only from one of the two live event logs.
 Use the -ForwardedEvents switch to read from the ForwardedEvents log instead of from the EXE/DLL and MSI/Script logs.
 Use the -EvtxLogFilePaths parameter to name one or more saved event log files to read.
+Use the -FromDateTime and -ToDateTime parameters to restrict the date/time range to report.
 Use the -NoPsFilter switch not to filter out random-named PowerShell policy test script files.
 Use the other -No* switches to omit fields from the output. -NoEventTime, -NoEventTimeXL, and -NoPID are the most important for reducing output size.
 

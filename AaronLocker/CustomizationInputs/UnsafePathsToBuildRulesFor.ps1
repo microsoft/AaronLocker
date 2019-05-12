@@ -7,24 +7,42 @@ This script outputs a sequence of hashtables that identify user-writable files o
 (The scripts favor publisher rules over hash rules.)
 Each hashtable must include "label" and "paths" properties, with additional optional properties.
 Hashtable properties:
-* label             - REQUIRED; incorporated into rules' names and descriptions.
-* paths             - REQUIRED; identifies one or more paths (comma separated if more than one).
-                      If a path is a directory, rules are generated for the existing files in that directory.
-                      If a path is to a file, a rule is generated for that file.
-* noRecurse         - OPTIONAL; if specified, rules are generated only for the files in the specified directory or directories.
-                      Otherwise, rules are also generated for files in subdirectories of the specified directory or directories.
-* enforceMinVersion - OPTIONAL; if specified, generated publisher rules enforce a minimum file version based on the file versions of the observed files.
-                      Otherwise, the generated rules do not enforce a minimum file version.
+* label              - REQUIRED; incorporated into rules' names and descriptions.
+* paths              - REQUIRED; identifies one or more paths (comma separated if more than one).
+                       If a path is a directory, rules are generated for the existing files in that directory.
+                       If a path is to a file, a rule is generated for that file.
+* pubruleGranularity - OPTIONAL; specifies granularity of publisher rules.
+                       If specified, must be one of the following:
+                         pubOnly - lowest granularity: Publisher rules specify publisher only
+                         pubProduct - Publisher rules specify publisher and product
+                         pubProductBinary - (default) Publisher rules specify publisher, product, and binary name
+                         pubProdBinVer - highest granularity: Publisher rules specify publisher, product, binary name, and minimum version.
+                       Microsoft-signed Windows and Visual Studio files are always handled at a minimum granularity of "pubProductBinary";
+                       other Microsoft-signed files are handled at a minimum granularity of "pubProduct".
+* noRecurse          - OPTIONAL; if specified, rules are generated only for the files in the specified directory or directories.
+                       Otherwise, rules are also generated for files in subdirectories of the specified directory or directories.
+* enforceMinVersion  - DEPRECATED and OPTIONAL. pubruleGranularity takes precedence if specified.
+                         Otherwise, setting to $false equivalent to pubruleGranularity = pubProductBinary;
+                         setting to $true equivalent to pubruleGranularity = pubProdBinVer.
+                      
 
 Examples of valid hash tables:
 
-    # Search one directory and its subdirectories for files to generate rules for. Don't include file version in generated publisher rules.
+    # Search one directory and its subdirectories for files to generate rules for. 
+    # Default granularity for publisher rules: create a separate rule for each file but allow any file version.
     @{
     label = "OneDrive";
     paths = "$env:LOCALAPPDATA\Microsoft\OneDrive";
-    enforceMinVersion = $false
     }
 
+    # Search one directory and its subdirectories for files to generate rules for. 
+    # Generated publisher rules contain only publisher and product names.
+    # (Note that some Microsoft-signed files will also include binary name.)
+    @{
+    label = "OneDrive";
+    paths = "$env:LOCALAPPDATA\Microsoft\OneDrive";
+    pubruleGranularity = "pubProduct";
+    }
 
     # Search two separate directory structures for files to generate rules for, plus one explicitly-identified file.
     @{
@@ -47,7 +65,7 @@ Examples of valid hash tables:
 @{
 label = "OneDrive";
 paths = "$env:LOCALAPPDATA\Microsoft\OneDrive";
-enforceMinVersion = $false;
+pubruleGranularity = "pubProduct";
 }
 
 

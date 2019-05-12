@@ -15,7 +15,7 @@ Output columns include:
 * File name - the file name without path information;
 * File path - Full path to the file;
 * Parent directory - The file's parent directory;
-* Publisher name, Product name - signature and product name that can be used in publisher rules;
+* Publisher name, Product name, Binary name, Version - signature and version resource information that can be used in publisher rules;
 * Hash - the file's hash;
 * CreationTime, LastAccessTime, LastWriteTime - the file's timestamps according to the file system;
 * File size.
@@ -80,6 +80,8 @@ Scan-Directories.ps1 -SearchOneUserProfile -DirsToSearch H:\
 Searches the user's profile directory and the H: drive.
 
 #>
+
+#TODO: Need automation to turn selected results into rules. Especially for PE files with non-standard extensions.
 
 #TODO: Find a way to miss the .js false-positives, including but not only in browser caches.
 #TODO: Skip .js in browser temp caches (IE on Win10: localappdata\Microsoft\Windows\INetCache) - possibly obviated by not looking at .js
@@ -176,6 +178,7 @@ if ($FindNonDefaultRootDirs)
 ### Inspect files for PE properties (on the cheap!)
 ### If it's 64 bytes or more, and the first two are "MZ", we're calling it a PE file.
 ### $file is a System.IO.FileInfo object.
+#TODO: Need to distinguish between EXE, DLL, SYS, etc.
 function IsExecutable($file)
 {
     #Write-Host $file.FullName -ForegroundColor Cyan
@@ -268,13 +271,13 @@ if ($SearchOneUserProfile)
 if ($SearchAllUserProfiles)
 {
     #Assume all unsafe paths
-    # No special folder or environment variable available. Get root directory from parent directory of user profile directory
-    $rootdir = [System.IO.Path]::GetDirectoryName($env:USERPROFILE)
-    #TODO: Skip browser-cache temp directories
+    # No special folder or environment variable available. Get user-profiles' root directory from the parent directory of the "all users" profile directory
+    $UsersRoot = [System.IO.Path]::GetDirectoryName($env:PUBLIC)
+    #TODO: If we want to look at .js files, need to skip browser-cache temp directories
     # Skip app-compat juntions  (most disallow FILE_LIST_DIRECTORY)
     # Skip symlinks -- "All Users" is a symlinkd for \ProgramData but unlike most app-compat junctions it can be listed/traversed.
     # This code prevents that.
-    Get-ChildItem -Force -Directory C:\Users | Where-Object { !$_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) } | foreach {
+    Get-ChildItem -Force -Directory $UsersRoot | Where-Object { !$_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) } | foreach {
         $dirsToInspect.Add($_.FullName, $UnsafeDir)
     }
 }
@@ -304,6 +307,8 @@ else
         "Parent directory" + "`t" +
         "Publisher name" + "`t" +
         "Product name" + "`t" +
+        "Binary name" + "`t" +
+        "Version" + "`t" +
         "Hash" + "`t" +
         "CreationTime" + "`t" +
         "LastAccessTime" + "`t" +
@@ -341,7 +346,7 @@ function InspectFiles([string]$directory, [string]$safety, [ref] [string[]]$writ
                 $fileext = $file.Extension
                 $filename = $file.Name
                 $parentDir = [System.IO.Path]::GetDirectoryName($fullname)
-                $pubName = $prodName = [String]::Empty
+                $pubName = $prodName = $binName = $binVer = [String]::Empty
                 $alfi = Get-AppLockerFileInformation $file.FullName -ErrorAction SilentlyContinue -ErrorVariable alfiErr
                 # Diagnostics. Seeing sharing violations on some operations
                 if ($alfiErr.Count -gt 0)
@@ -356,6 +361,8 @@ function InspectFiles([string]$directory, [string]$safety, [ref] [string[]]$writ
                     {
                         $pubName = $pub.PublisherName
                         $prodName = $pub.ProductName
+                        $binName = $pub.BinaryName
+                        $binVer = $pub.BinaryVersion
                     }
                     $hash = $alfi.Hash.HashDataString
                 }
@@ -394,6 +401,8 @@ function InspectFiles([string]$directory, [string]$safety, [ref] [string[]]$writ
                     $parentDir + "`t" + 
                     $pubName + "`t" +
                     $prodName + "`t" +
+                    $binName + "`t" +
+                    $binVer + "`t" +
                     $hash + "`t" +
                     $file.CreationTime + "`t" + 
                     $file.LastAccessTime  + "`t" + 
