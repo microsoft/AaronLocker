@@ -59,6 +59,7 @@ Optional: If specified, all rule names begin with the specified RuleNamePrefix.
 Scans the OneDrive directory and subdirectories in the current user's profile.
 All generated rule names will begin with "OneDrive".
 The generated publisher rules are written to ..\WorkingFiles\OneDrivePubRules.xml and the generated hash rules to ..\WorkingFiles\OneDriveHashRules.xml.
+Publisher rules created with default granularity (one rule per file).
 
 #>
 
