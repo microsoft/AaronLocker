@@ -19,6 +19,9 @@ Functions to create Excel spreadsheets/workbooks:
   AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$CrLfEncoded)
   AddWorksheetFromCsvData([string[]]$csv, [string]$tabname, [string]$CrLfEncoded)
   CreateExcelFromCsvFile([string]$filename, [string]$tabname, [string]$CrLfEncoded, [string]$saveAsName)
+
+Function to determine whether a file is a Win32 EXE, a Win32 DLL, or neither
+  IsWin32Executable([string]$filename)
 #>
 
 #pragma once :-)
@@ -278,3 +281,111 @@ function CreateExcelFromCsvFile([string]$filename, [string]$tabname, [string]$Cr
         ReleaseExcelApplication
     }
 }
+
+####################################################################################################
+# Global function to determine whether a file is a Win32 EXE, a Win32 DLL, or neither
+####################################################################################################
+
+# Returns "EXE", "DLL", or nothing
+function IsWin32Executable([string]$filename)
+{
+
+    # sizes, offsets, and values for PE header structures
+    Set-Variable sizeofImageDosHeader -Option Constant -Value 64
+    Set-Variable sizeofImageNtHeaders64 -Option Constant -Value 264
+    Set-Variable offset_e_lfanew -Option Constant -Value 60
+    Set-Variable offset_FileHeader -Option Constant -Value 4
+    Set-Variable offset_FileHeader_Characteristics -Option Constant -Value 18
+    Set-Variable offset_OptionalHeader -Option Constant -Value 24
+    Set-Variable offset_OptionalHeader_Subsystem -Option Constant -Value 68
+    Set-Variable IMAGE_SUBSYSTEM_WINDOWS_GUI -Option Constant -Value 2
+    Set-Variable IMAGE_SUBSYSTEM_WINDOWS_CUI -Option Constant -Value 3
+
+
+    # Read first 64 bytes (size of IMAGE_DOS_HEADER)
+    $bytesImageDosHeader = Get-Content -Encoding Byte -TotalCount $sizeofImageDosHeader $filename -ErrorAction SilentlyContinue
+    if ($null -eq $bytesImageDosHeader -or $bytesImageDosHeader.Length -lt $sizeofImageDosHeader)
+    {
+        Write-Verbose "$filename : Non-existent or unreadable file, or less than $sizeofImageDosHeader bytes."
+        #Write-Output ""
+        return;
+    }
+
+    # Verify that the first two bytes are "MZ"
+    $dosSig = "" + [char]($bytesImageDosHeader[0]) + [char]($bytesImageDosHeader[1])
+    if ($dosSig -ne "MZ")
+    {
+        Write-Verbose "$filename : Not a PE file; first two bytes are not MZ."
+        #Write-Output ""
+        return;
+    }
+
+    # Read the IMAGE_DOS_HEADER e_lfanew attribute to determine the offset into the file where the IMAGE_NT_HEADERS begin
+    # This line of code adapted from Matt Graeber, http://www.exploit-monday.com/2013/03/ParsingBinaryFileFormatsWithPowerShell.html
+    $offsetImageNtHeaders = [Int32]('0x{0}' -f (( $bytesImageDosHeader[ ($offset_e_lfanew + 3) .. $offset_e_lfanew] | % {$_.ToString('X2')}) -join ''))
+
+    # Read up to where the NT headers are, and then the size of IMAGE_NT_HEADERS64 which should be more than we need
+    $totalToRead = $offsetImageNtHeaders + $sizeofImageNtHeaders64
+    $bytesImageNtHeaders = Get-Content -Encoding Byte -TotalCount $totalToRead $filename -ErrorAction SilentlyContinue
+    if ($bytesImageNtHeaders.Length -lt $totalToRead)
+    {
+        Write-Verbose "$filename : Not a PE file; less than $totalToRead bytes."
+        #Write-Output ""
+        return;
+    }
+
+    # Verify that the PE signature is present there. (Actually is "PE\0\0" but just going to look for the first two bytes.)
+    $peSig = "" + [char]($bytesImageNtHeaders[$offsetImageNtHeaders]) + [char]($bytesImageNtHeaders[$offsetImageNtHeaders+1])
+    if ($peSig -ne "PE")
+    {
+        Write-Verbose "$filename : Not a PE file; 'PE' signature bytes not found."
+        #Write-Output ""
+        return;
+    }
+
+    # Get the offset of the "Characteristics" attribute in the file header
+    $offsChar = $offsetImageNtHeaders + $offset_FileHeader + $offset_FileHeader_Characteristics
+    # Read the two-byte Characteristics
+    $characteristics = [UInt16]('0x{0}' -f (( $bytesImageNtHeaders[($offsChar+1)..$offsChar] | % {$_.ToString('X2')}) -join ''))
+
+    # Get the offset of the two-byte "Subsystem" attribute in the optional headers, and read that attribute
+    $offsSubsystem = $offsetImageNtHeaders + $offset_OptionalHeader + $offset_OptionalHeader_Subsystem
+    $subsystem = [UInt16]('0x{0}' -f (( $bytesImageNtHeaders[($offsSubsystem+1)..$offsSubsystem] | % {$_.ToString('X2')}) -join ''))
+
+    # Verify that Subsystem is IMAGE_SUBSYSTEM_WINDOWS_GUI or IMAGE_SUBSYSTEM_WINDOWS_CUI
+    if ($subsystem -ne $IMAGE_SUBSYSTEM_WINDOWS_GUI -and $subsystem -ne $IMAGE_SUBSYSTEM_WINDOWS_CUI)
+    {
+        Write-Verbose "$filename : Not a Win32 EXE or DLL; Subsystem = $subsystem."
+        #Write-Output ""
+        return;
+    }
+
+    if ($characteristics -band 0x2000)
+    {
+        Write-Verbose "$filename : Win32 DLL; Subsystem = $subsystem."
+        Write-Output "DLL"
+    }
+    else
+    {
+        Write-Verbose "$filename : Win32 EXE; Subsystem = $subsystem."
+        Write-Output "EXE"
+    }
+
+    #if ($characteristics -band 0x0001) {"IMAGE_FILE_RELOCS_STRIPPED"}
+    #if ($characteristics -band 0x0002) {"IMAGE_FILE_EXECUTABLE_IMAGE"}
+    #if ($characteristics -band 0x0004) {"IMAGE_FILE_LINE_NUMS_STRIPPED"}
+    #if ($characteristics -band 0x0008) {"IMAGE_FILE_LOCAL_SYMS_STRIPPED"}
+    #if ($characteristics -band 0x0010) {"IMAGE_FILE_AGGRESIVE_WS_TRIM"}
+    #if ($characteristics -band 0x0020) {"IMAGE_FILE_LARGE_ADDRESS_AWARE"}
+    #if ($characteristics -band 0x0080) {"IMAGE_FILE_BYTES_REVERSED_LO"}
+    #if ($characteristics -band 0x0100) {"IMAGE_FILE_32BIT_MACHINE"}
+    #if ($characteristics -band 0x0200) {"IMAGE_FILE_DEBUG_STRIPPED"}
+    #if ($characteristics -band 0x0400) {"IMAGE_FILE_REMOVABLE_RUN_FROM_SWAP"}
+    #if ($characteristics -band 0x0800) {"IMAGE_FILE_NET_RUN_FROM_SWAP"}
+    #if ($characteristics -band 0x1000) {"IMAGE_FILE_SYSTEM"}
+    #if ($characteristics -band 0x2000) {"IMAGE_FILE_DLL"}
+    #if ($characteristics -band 0x4000) {"IMAGE_FILE_UP_SYSTEM_ONLY"}
+    #if ($characteristics -band 0x8000) {"IMAGE_FILE_BYTES_REVERSED_HI"}
+}
+
+

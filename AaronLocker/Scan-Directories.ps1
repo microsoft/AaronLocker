@@ -175,25 +175,6 @@ if ($FindNonDefaultRootDirs)
 
 
 ### ======================================================================
-### Inspect files for PE properties (on the cheap!)
-### If it's 64 bytes or more, and the first two are "MZ", we're calling it a PE file.
-### $file is a System.IO.FileInfo object.
-#TODO: Need to distinguish between EXE, DLL, SYS, etc.
-function IsExecutable($file)
-{
-    #Write-Host $file.FullName -ForegroundColor Cyan
-    if ($file.Length -lt 64)
-    {
-        return $false
-    }
-
-    $mzHeader = Get-Content -LiteralPath $file.FullName -TotalCount 2 -Encoding Byte -ErrorAction SilentlyContinue
-
-    # 0x4D = 'M', 0x5A = 'Z'
-    return $null -ne $mzHeader -and ($mzHeader[0] -eq 0x4D -and $mzHeader[1] -eq 0x5A)
-}
-
-### ======================================================================
 
 $rootDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
 # Dot-source the config file.
@@ -334,9 +315,9 @@ function InspectFiles([string]$directory, [string]$safety, [ref] [string[]]$writ
             {
                 $filetype = "MSI"
             }
-            elseif ((!($NoPEFiles) -and (IsExecutable($file))))
+            elseif (!($NoPEFiles))
             {
-                $filetype = "EXE/DLL"
+                $filetype = IsWin32Executable($file.FullName)
             }
 
             # Output
