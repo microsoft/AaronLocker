@@ -182,6 +182,9 @@ $arrALFI = @()
 $pubPolicies = @{}
 $hashPolicies = @{}
 
+# Marker that might need to be inserted temporarily into a file name.
+Set-Variable filenameMarker -Option Constant -Value "24B311FED57A7997715E4."
+
 ####################################################################################################
 # Gather file information
 ####################################################################################################
@@ -204,13 +207,51 @@ foreach($fsp in $FileSystemPaths)
                 # Get-AppLockerFileInformation -Directory inspects files with these extensions:
                 # .com, .exe, .dll, .ocx, .msi, .msp, .mst, .bat, .cmd, .js, .ps1, .vbs, .appx
                 # But this script drops .msi, .msp, .mst, and .appx
+                # filesNotInspected are the files Get-AppLockerFileInformation -Directory ignored.
+                # If any of them are Win32 exe/dll files, pick them up too
+                $filesNotInspected = @()
+                # Don't need to look at files with these extensions - already looked at
+                $extsToIgnore = ".com", ".exe", ".dll", ".ocx", ".msi", ".msp", ".mst", ".bat", ".cmd", ".js", ".ps1", ".vbs", ".appx"
+                # Additional extensions that can be assumed not to be PE files; save time by not opening and inspecting them.
+                $extsToIgnore += 
+                    ".admx", ".adml", ".etl", ".evtx", 
+                    ".gif", ".jpg", ".jpeg", ".png", ".svg", ".ico", ".pfm", ".ttf", ".fon", ".otf", ".cur",
+                    ".html", ".htm", ".hta", ".css", 
+                    ".txt", ".log", ".xml". ".xsl", ".ini",
+                    ".pdf", ".tif", ".tiff", 
+                    ".lnk", ".url", ".inf",
+                    ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
+                    ".zip", ".7z"
                 if ($RecurseDirectories)
                 {
                     $arrALFI += Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp -Recurse
+                    # Get all files with extensions that haven't been inspected. (Would have used -Exclude with gci but it doesn't interact well with -File - bug?)
+                    $filesNotInspected = Get-ChildItem -Recurse -Path $fsp -Force -File | 
+                        Where-Object { $_.Extension -notin $extsToIgnore }
                 }
                 else
                 {
                     $arrALFI += Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp
+                    # Get all files with extensions that haven't been inspected. (Would have used -Exclude with gci but it doesn't interact well with -File - bug?)
+                    $filesNotInspected = Get-ChildItem -Path $fsp -Force -File | 
+                        Where-Object { $_.Extension -notin $extsToIgnore }
+                }
+                # Look at all the files not yet inspected and capture information for those that are Win32 EXE/DLLs with non-standard extensions.
+                foreach( $fileToInspect in $filesNotInspected )
+                {
+                    # If IsWin32Executable returns "EXE" or "DLL" here it means it's a Win32 PE with a non-standard extension
+                    $StdPeExt = IsWin32Executable($fileToInspect.FullName)
+                    if ($null -ne $StdPeExt)
+                    {
+                        # We can get the AppLocker file information, but without a recognized extension, New-AppLockerPolicy
+                        # won't know what collection to put it in. Fake it out by adjusting the Path attribute until after the
+                        # rule is generated, then set it back.
+                        $alfi = Get-AppLockerFileInformation -Path $fileToInspect.FullName
+                        # Temporarily add the standard extension after an identifiable marker that we can remove later.
+                        $alfi.Path.Path += $filenameMarker + $StdPeExt
+                        # Now add it to the collection of AppLockerFileInformation objects to build rules for.
+                        $arrALFI += $alfi
+                    }
                 }
             }
             elseif ($fspInfo -is [System.IO.FileInfo])
@@ -272,6 +313,14 @@ foreach($alfi in $arrALFI)
 
     # Favor publisher rule; hash rule otherwise
     $pol = New-AppLockerPolicy -FileInformation $alfi -RuleType Publisher,Hash
+
+    # Remove any temporary edit from the path name that was needed to get New-AppLockerPolicy to put it in the correct rule collection.
+    # Need to restore it for the rule descriptions.
+    $ixMarker = $alfi.Path.Path.IndexOf($filenameMarker)
+    if ($ixMarker -gt 0)
+    {
+        $alfi.Path.Path = $alfi.Path.Path.Substring(0, $ixMarker)
+    }
 
     foreach ($ruleCollection in $pol.RuleCollections)
     {
