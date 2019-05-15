@@ -303,7 +303,8 @@ function IsWin32Executable([string]$filename)
 
 
     # Read first 64 bytes (size of IMAGE_DOS_HEADER)
-    $bytesImageDosHeader = Get-Content -Encoding Byte -TotalCount $sizeofImageDosHeader $filename -ErrorAction SilentlyContinue
+    # Always make sure returned data is an array, even if the file contains exactly one byte
+    $bytesImageDosHeader = @() + (Get-Content -Encoding Byte -TotalCount $sizeofImageDosHeader $filename -ErrorAction SilentlyContinue)
     if ($null -eq $bytesImageDosHeader -or $bytesImageDosHeader.Length -lt $sizeofImageDosHeader)
     {
         Write-Verbose "$filename : Non-existent or unreadable file, or less than $sizeofImageDosHeader bytes."
