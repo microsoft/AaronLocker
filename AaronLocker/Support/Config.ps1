@@ -58,7 +58,7 @@ $ps1_ExportPolicyToCSV                       = [System.IO.Path]::Combine($suppor
 $ps1_ExportPolicyToExcel                     = [System.IO.Path]::Combine($rootDir,    "ExportPolicy-ToExcel.ps1")
 
 
-####### OUTPUTS
+####### OUTPUTS AND TIMESTAMPS
 # Paths to result files containing AppLocker policy rules.
 # Policy rules file have timestamp embedded into file name so previous ones don't get overwritten and so that alphabetic sort shows which is newest.
 # Example filenames:

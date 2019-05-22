@@ -48,6 +48,9 @@ If this switch is specified, searches the user's profile directory.
 .PARAMETER SearchAllUserProfiles
 If this switch is specified, searches from the root directory of all users' profiles (C:\Users)
 
+.PARAMETER SearchNonDefaultRootDirs
+If this switch is specified, search all non-standard directories in the %SystemDrive% root directory. These directories often contain LOB applications.
+
 .PARAMETER DirsToSearch
 Specifies one or more directories to search.
 
@@ -59,6 +62,9 @@ If this switch is specified, does not search for script files.
 
 .PARAMETER NoMSIs
 If this switch is specified, does not search for MSI files.
+
+.PARAMETER JS
+If this switch is specified, report .js files as script files; otherwise, skip .js files entirely.
 
 .PARAMETER DirectoryNamesOnly
 If this switch is specified, reports the names and "safety" of directories that contain files of interest but no file information.
@@ -81,12 +87,7 @@ Searches the user's profile directory and the H: drive.
 
 #>
 
-#TODO: Need automation to turn selected results into rules. Especially for PE files with non-standard extensions.
-
-#TODO: Find a way to miss the .js false-positives, including but not only in browser caches.
-#TODO: Skip .js in browser temp caches (IE on Win10: localappdata\Microsoft\Windows\INetCache) - possibly obviated by not looking at .js
-#TODO: Maybe offer an option not to exclude .js; could be useful outside of user profiles? Maybe include .js for some directory types and not others.
-#TODO: Distinguish between Exe and Dll files based on IMAGE_FILE_HEADER characteristics.
+#TODO: Need automation to turn selected results into rules.
 
 param(
     [parameter(ParameterSetName="SearchDirectories")]
@@ -109,6 +110,10 @@ param(
     [switch]
     $SearchAllUserProfiles = $false,
 
+    [parameter(ParameterSetName="SearchDirectories")]
+    [switch]
+    $SearchNonDefaultRootDirs = $false,
+
     [parameter(ParameterSetName="SearchDirectories", Mandatory=$false)]
 	[String[]]
 	$DirsToSearch,
@@ -124,6 +129,10 @@ param(
     [parameter(ParameterSetName="SearchDirectories")]
     [switch]
     $NoMSIs = $false,
+
+    [parameter(ParameterSetName="SearchDirectories")]
+    [switch]
+    $JS = $false,
 
     [parameter(ParameterSetName="SearchDirectories")]
     [switch]
@@ -146,7 +155,9 @@ Set-StrictMode -Version Latest
 ### ======================================================================
 ### The FindNonDefaultRootDirs is a standalone option that cannot be used with other switches. 
 ### It searches the SystemDrive root directory and enumerates non-default directory names.
-if ($FindNonDefaultRootDirs)
+### SearchNonDefaultRootDirs also uses that information.
+$nondefaultRootDirs = $null
+if ($FindNonDefaultRootDirs -or $SearchNonDefaultRootDirs)
 {
     $defaultRootDirs =
         '$Recycle.Bin',
@@ -166,11 +177,14 @@ if ($FindNonDefaultRootDirs)
 
     # Enumerate root-level directories whether hidden or not, but exclude junctions and symlinks.
     # Output the ones that don't exist in a default Windows installation.
-    Get-ChildItem -Directory -Force ($env:SystemDrive + "\") | 
-        Where-Object { !$_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) -and !($_ -in $defaultRootDirs) } |
-        foreach { $_.FullName }
+    $nondefaultRootDirs = (Get-ChildItem -Directory -Force ($env:SystemDrive + "\") | 
+        Where-Object { !$_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) -and !($_ -in $defaultRootDirs) })
 
-    return
+    if ($FindNonDefaultRootDirs)
+    {
+        $nondefaultRootDirs | foreach { $_.FullName }
+        return
+    }
 }
 
 
@@ -189,11 +203,15 @@ Set-Variable UnknownDir -option Constant -value "UnknownDir"
 $scriptExtensions =
     ".bat",
     ".cmd",
-   # ".js", ### Too many false positives; these are almost always executed within programs that do not restrict .js.
     ".vbs",
     ".wsf",
     ".wsh",
     ".ps1"
+# Include .js files only if specifically requested. Too many false positives otherwise; AppLocker restrictions applied only within Windows Script Host.
+if ($JS)
+{
+    $scriptExtensions += ".js"
+}
 $MsiExtensions =
     ".msi",
     ".msp",
@@ -245,7 +263,7 @@ if ($SearchProgramData)
 if ($SearchOneUserProfile)
 {
     #Assume all unsafe paths
-    #TODO: Skip browser-cache temp directories
+    #TODO: Always ignore .js files in browser-cache temp directories?
     $dirsToInspect.Add($env:USERPROFILE, $UnsafeDir)
 }
 
@@ -254,13 +272,18 @@ if ($SearchAllUserProfiles)
     #Assume all unsafe paths
     # No special folder or environment variable available. Get user-profiles' root directory from the parent directory of the "all users" profile directory
     $UsersRoot = [System.IO.Path]::GetDirectoryName($env:PUBLIC)
-    #TODO: If we want to look at .js files, need to skip browser-cache temp directories
+    #TODO: Always ignore .js files in browser-cache temp directories?
     # Skip app-compat juntions  (most disallow FILE_LIST_DIRECTORY)
     # Skip symlinks -- "All Users" is a symlinkd for \ProgramData but unlike most app-compat junctions it can be listed/traversed.
     # This code prevents that.
     Get-ChildItem -Force -Directory $UsersRoot | Where-Object { !$_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) } | foreach {
         $dirsToInspect.Add($_.FullName, $UnsafeDir)
     }
+}
+
+if ($SearchNonDefaultRootDirs)
+{
+    $nondefaultRootDirs | foreach { $dirsToInspect.Add($_.FullName, $UnknownDir) }
 }
 
 if ($DirsToSearch)
@@ -297,11 +320,15 @@ else
         "File size"
 }
 
+
 function InspectFiles([string]$directory, [string]$safety, [ref] [string[]]$writableDirs)
 {
     $doNoMore = $false
 
-    Get-ChildItem -File $directory -Force -ErrorAction SilentlyContinue -PipelineVariable file | foreach {
+    # Don't waste cycles looking at file types that are not of interest. (A .txt should never be a PE...)
+    Get-ChildItem -File $directory -Force -ErrorAction SilentlyContinue -PipelineVariable file | 
+    Where-Object { $file.Extension -notin $NeverExecutableExts } |
+    foreach {
 
         # Work around Get-AppLockerFileInformation bug that vomits on zero-length input files
         if ($_.Length -gt 0 -and !$doNoMore)
@@ -315,7 +342,8 @@ function InspectFiles([string]$directory, [string]$safety, [ref] [string[]]$writ
             {
                 $filetype = "MSI"
             }
-            elseif (!($NoPEFiles))
+            # Don't waste cycles inspecting .js files here if they haven't been evaluated.
+            elseif (!($NoPEFiles) -and ($file.Extension -ne ".js"))
             {
                 $filetype = IsWin32Executable($file.FullName)
             }
@@ -406,7 +434,7 @@ function InspectDirectories([string]$directory, [string]$safety, [ref][string[]]
         # * Can add criteria here to skip browser caches, etc.
         if (!$subdir.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint))
         {
-            Write-Verbose ("... " + $subdir.FullName)
+            Write-Verbose ("... subdir " + $subdir.FullName)
             InspectDirectories $subdir.FullName $safety $writableDirs
         }
         else

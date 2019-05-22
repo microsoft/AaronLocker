@@ -19,13 +19,13 @@ Hashtable properties:
                          pubProdBinVer - highest granularity: Publisher rules specify publisher, product, binary name, and minimum version.
                        Microsoft-signed Windows and Visual Studio files are always handled at a minimum granularity of "pubProductBinary";
                        other Microsoft-signed files are handled at a minimum granularity of "pubProduct".
-* noRecurse          - OPTIONAL; if specified, rules are generated only for the files in the specified directory or directories.
+* JSHashRules        - OPTIONAL; if specified and set to $true, generates hash rules for unsigned .js files; otherwise, doesn't generate them.
+* noRecurse          - OPTIONAL; if specified and set to $true, rules are generated only for the files in the specified directory or directories.
                        Otherwise, rules are also generated for files in subdirectories of the specified directory or directories.
 * enforceMinVersion  - DEPRECATED and OPTIONAL. pubruleGranularity takes precedence if specified.
                          Otherwise, setting to $false equivalent to pubruleGranularity = pubProductBinary;
                          setting to $true equivalent to pubruleGranularity = pubProdBinVer.
                       
-
 Examples of valid hash tables:
 
     # Search one directory and its subdirectories for files to generate rules for. 
@@ -67,6 +67,5 @@ label = "OneDrive";
 paths = "$env:LOCALAPPDATA\Microsoft\OneDrive";
 pubruleGranularity = "pubProduct";
 }
-
 
 

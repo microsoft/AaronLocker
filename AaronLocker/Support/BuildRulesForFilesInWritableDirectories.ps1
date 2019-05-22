@@ -2,9 +2,6 @@
 .SYNOPSIS
 Builds tightly-scoped but forward-compatible AppLocker rules for files in user-writable directories. The rules are intended to be merged into a larger set using Create-Policies.ps1 in the root directory.
 
-TODO: Handle files with non-standard extensions, especially EXE and DLL files. And distinguish EXE and DLLs (without relying on extension)
-TODO: If pubOnly specified and a signed file is missing version information, generate a publisher rule instead of a hash rule.
-
 .DESCRIPTION
 This script takes a list of one or more file system objects (files and/or directories) and generates rules to allow execution of the corresponding files.
 
@@ -43,6 +40,9 @@ Optional parameter to specify the granularity of generated publisher rules. If s
 * pubProdBinVer - highest granularity: Publisher rules specify publisher, product, binary name, and minimum version.
 Note that Microsoft-signed Windows and Visual Studio files are always handled at a minimum granularity of "pubProductBinary";
 other Microsoft-signed files are handled at a minimum granularity of "pubProduct".
+
+.PARAMETER JSHashRules
+If this switch is specified, generates hash rules for unsigned .js files; otherwise, doesn't.
 
 .PARAMETER OutputPubFileName
 Required: the name/path of the XML output file containing the generated publisher rules.
@@ -89,6 +89,10 @@ param(
     [ValidateSet("pubOnly", "pubProduct", "pubProductBinary", "pubProdBinVer")]
     [String]
     $PubRuleGranularity = "pubProductBinary",
+
+    # If specified, generates hash rules for unsigned .js files; otherwise, doesn't
+    [switch]
+    $JSHashRules,
 
     # Name of output file for publisher rules
     [parameter(Mandatory=$true)]
@@ -185,6 +189,20 @@ $hashPolicies = @{}
 # Marker that might need to be inserted temporarily into a file name.
 Set-Variable filenameMarker -Option Constant -Value "24B311FED57A7997715E4."
 
+# Policy Name and Description attributes cannot exceed 1024 characters. [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.FileHashRule]::DescriptionMaxLength
+# This function truncates strings if needed with ellipses at end.
+function StrLimit([string]$proposed, [int]$limit)
+{
+    if ($proposed.Length -gt $limit)
+    {
+        $proposed.Substring(0, $limit - 3) + "..."
+    }
+    else
+    {
+        $proposed
+    }
+}
+
 ####################################################################################################
 # Gather file information
 ####################################################################################################
@@ -210,18 +228,8 @@ foreach($fsp in $FileSystemPaths)
                 # filesNotInspected are the files Get-AppLockerFileInformation -Directory ignored.
                 # If any of them are Win32 exe/dll files, pick them up too
                 $filesNotInspected = @()
-                # Don't need to look at files with these extensions - already looked at
-                $extsToIgnore = ".com", ".exe", ".dll", ".ocx", ".msi", ".msp", ".mst", ".bat", ".cmd", ".js", ".ps1", ".vbs", ".appx"
-                # Additional extensions that can be assumed not to be PE files; save time by not opening and inspecting them.
-                $extsToIgnore += 
-                    ".admx", ".adml", ".etl", ".evtx", 
-                    ".gif", ".jpg", ".jpeg", ".png", ".svg", ".ico", ".pfm", ".ttf", ".fon", ".otf", ".cur",
-                    ".html", ".htm", ".hta", ".css", 
-                    ".txt", ".log", ".xml". ".xsl", ".ini",
-                    ".pdf", ".tif", ".tiff", 
-                    ".lnk", ".url", ".inf",
-                    ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
-                    ".zip", ".7z"
+                # Don't need to look at files with extensions that Get-AppLockerFileInformation already looked at, nor extensions that should never be PE files.
+                $extsToIgnore = $GetAlfiDefaultExts + $NeverExecutableExts
                 if ($RecurseDirectories)
                 {
                     $arrALFI += Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp -Recurse
@@ -309,6 +317,13 @@ foreach($alfi in $arrALFI)
                 ($msprodname.Contains("visual studio"))
             )
         }
+        # If signed (not by Microsoft) but missing version information, and granularity is pubOnly,
+        # jam in some placeholder values so that New-AppLockerPolicy will create a publisher rule
+        # instead of a hash rule. These fields will get replaced in the publisher rule with "*" anyway.
+        elseif (!$pubRuleInclProduct -and !($alfi.HasProductName -and $alfi.HasBinaryName))
+        {
+            $alfi.Publisher.ProductName = $alfi.Publisher.BinaryName = "PLACEHOLDER"
+        }
     }
 
     # Favor publisher rule; hash rule otherwise
@@ -375,11 +390,12 @@ foreach($alfi in $arrALFI)
                         $pol.RuleCollections.PublisherConditions.BinaryVersionRange.LowSection = $null
 
                         # Product-specific name/description
+                        # (Depending on definition, including all file system paths might hit character limit for Description, so limit it)
                         $rule.Name = $RuleNamePrefix + $pubInfo.ProductName
-                        $rule.Description = 
+                        $rule.Description = StrLimit -proposed (
                             "Product: " + $pubInfo.ProductName + "`r`n" + 
                             "Publisher: " + $pubname + "`r`n" + 
-                            "File(s) found in: " + $FileSystemPaths
+                            "File(s) found in: " + $FileSystemPaths) -limit ([Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.FileHashRule]::DescriptionMaxLength)
                     }
                 }
                 else
@@ -390,9 +406,10 @@ foreach($alfi in $arrALFI)
 
                     # Publisher-specific name/description
                     $rule.Name = $RuleNamePrefix + $pubInfo.PublisherName
-                    $rule.Description = 
+                    # (Depending on definition, including all file system paths might hit character limit for Description, so limit it)
+                    $rule.Description = StrLimit -proposed (
                         "Publisher: " + $pubname + "`r`n" + 
-                        "File(s) found in: " + $FileSystemPaths
+                        "File(s) found in: " + $FileSystemPaths) -limit ([Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.FileHashRule]::DescriptionMaxLength)
                 }
 
                 if (!$pubPolicies.ContainsKey($key))
@@ -424,13 +441,15 @@ foreach($alfi in $arrALFI)
             }
             elseif ($rule -is [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.FileHashRule])
             {
+                #TODO: I think this case is already taken care of now.
                 # If the file is signed (not by Microsoft), publisher rule granularity is publisher-only, and there's already a rule covering this file,
                 # don't generate a hash rule for it.
                 if ($signedFile -and !$MSSigned -and !$pubRuleInclProduct -and $pubPolicies.ContainsKey($rtype + "|" + $pubname))
                 {
                     Write-Verbose -Message ("Not creating hash rule for signed file " + $alfi.Path.Path)
                 }
-                else
+                # Hash rule if it's not a .js file or the $JSHashRules override is specified
+                elseif (!($alfi.Path.Path.EndsWith(".JS")) -or $JSHashRules)
                 {
                     # Hash rule - file is missing signature and/or PE version information
                     # Record the full path into the policy

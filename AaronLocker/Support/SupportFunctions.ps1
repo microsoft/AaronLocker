@@ -22,6 +22,8 @@ Functions to create Excel spreadsheets/workbooks:
 
 Function to determine whether a file is a Win32 EXE, a Win32 DLL, or neither
   IsWin32Executable([string]$filename)
+
+Global variables defining known file extensions
 #>
 
 #pragma once :-)
@@ -389,4 +391,40 @@ function IsWin32Executable([string]$filename)
     #if ($characteristics -band 0x8000) {"IMAGE_FILE_BYTES_REVERSED_HI"}
 }
 
+
+####################################################################################################
+# Global variables - known file extensions
+####################################################################################################
+#
+# With the -Directory switch, the Get-AppLockerFileInformation cmdlet inspects files with the extensions shown below (GetAlfiDefaultExts). 
+# Create-Policies.ps1 (via BuildRulesForFilesInWritableDirectories.ps1) and Scan-Directories.ps1 inspect the content of other files to 
+# determine whether any of them are Portable Executable files with non-standard extensions. To save the cost of reading in lots of files that
+# are never PE files (never should be, anyway), those scripts consume this script's output and doesn't inspect files with these extensions.
+# 
+# NOTE THAT IF YOU EDIT THE NeverExecutableExts ARRAY:
+# * Make sure the script returns one array of strings: comma after each one except the last.
+# * Each extension must begin with a ".".
+# * Extensions cannot contain embedded dot characters. For example, a file named "lpc.win32.bundle" has the extension ".bundle" and not ".win32.bundle"
+# * Do NOT add any of the extensions that Get-AppLockerFileInformation searches.
+# * Order doesn't matter.
+# * Do not edit the GetAlfiDefaultExts array.
+# 
+
+Set-Variable -Name GetAlfiDefaultExts -Option Constant -Value ".com", ".exe", ".dll", ".ocx", ".msi", ".msp", ".mst", ".bat", ".cmd", ".js", ".ps1", ".vbs", ".appx"
+Set-Variable -Name NeverExecutableExts -Option Constant -Value `
+    ".admx", ".adml", ".opax", ".opal", 
+    ".etl", ".evtx", ".msc", ".pdb",
+    ".chm", ".hlp",
+    ".gif", ".jpg", ".jpeg", ".png", ".bmp", ".svg", ".ico", ".pfm", ".ttf", ".fon", ".otf", ".cur",
+    ".html", ".htm", ".hta", ".css", ".json",
+    ".txt", ".log", ".xml", ".xsl", ".ini", ".csv", ".reg", ".mof",
+    ".pdf", ".tif", ".tiff", ".xps", ".rtf",
+    ".lnk", ".url", ".inf",
+    ".odl", ".odlgz", ".odlsent",                                 # OneDrive data files
+    ".mui",                                                       # .mui is a DLL but it is always loaded as data-only, so no need for AppLocker rules
+    ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm",           # Microsoft Word
+    ".xls", ".xlsx", ".xlsm", ".xlt", ".xltx", ".xltm",           # Microsoft Excel
+    ".ppt", ".pptx", ".pptm", ".pot", ".potx", ".potm", ".pps", ".ppsx", # Microsoft PowerPoint
+    ".zip", ".7z", ".tar",
+    ".wav", ".wmv", ".mp3", ".mp4", ".mpg", ".mpeg", ".avi", ".mov"
 
