@@ -164,8 +164,8 @@ if ($Rescan)
 
     # Enumerate user-writable subdirectories in protected directories. Capture grantees so they can be inspected afterwards.
 	Write-Host "Enumerating writable directories in $env:windir" -ForegroundColor Cyan
-    $knownAdmins = @()
-    $knownAdmins += & $ps1_KnownAdmins
+    [System.Collections.ArrayList]$knownAdmins = @()
+    $knownAdmins.AddRange( @(& $ps1_KnownAdmins) )
 	& $ps1_EnumWritableDirs -RootDirectory $env:windir -ShowGrantees -OutputXML -KnownAdmins $knownAdmins | Out-File -Encoding ASCII $windirFullXml
 	Write-Host "Enumerating writable directories in $env:ProgramFiles" -ForegroundColor Cyan
 	& $ps1_EnumWritableDirs -RootDirectory $env:ProgramFiles -ShowGrantees -OutputXML -KnownAdmins $knownAdmins | Out-File -Encoding ASCII $PfFullXml
@@ -343,8 +343,8 @@ $sPF       = "$env:ProgramFiles\".ToLower()
 
 # Build arrays of processed directory names with duplicates removed. (E.g., System32\Com\dmp and
 # SysWOW64\Com\dmp can both be covered with a single entry.)
-$Wr_windir = @()
-$Wr_PF = @()
+[System.Collections.ArrayList]$Wr_windir = @()
+[System.Collections.ArrayList]$Wr_PF = @()
 
 # For the Windows list, replace matching System32, SysWOW64, and Windows paths with corresponding
 # AppLocker variables, then add to collection if not already present.
@@ -356,7 +356,7 @@ $Wr_raw_windir | foreach {
     # Don't add the rule twice if it appears in both System32 and SysWOW64, since both map to %SYSTEM32%.
     if (!$Wr_windir.Contains($dir))
     {
-    	$Wr_windir += $dir
+    	$Wr_windir.Add($dir) | Out-Null
     }
 }
 
@@ -365,7 +365,7 @@ $Wr_raw_windir | foreach {
 $Wr_raw_PF86 | foreach {
 	$dir = $_.ToLower()
 	if ($dir.StartsWith($sPF86))     { $dir = "%PROGRAMFILES%\" + $dir.Substring($sPF86.Length) }
-	$Wr_PF += $dir
+	$Wr_PF.Add($dir) | Out-Null
 }
 
 $Wr_raw_PF | foreach {
@@ -374,7 +374,7 @@ $Wr_raw_PF | foreach {
 	# Possibly already added same directory from PF86; don't add again
 	if (!$Wr_PF.Contains($dir))
 	{
-		$Wr_PF += $dir
+		$Wr_PF.Add($dir) | Out-Null
 	}
 }
 

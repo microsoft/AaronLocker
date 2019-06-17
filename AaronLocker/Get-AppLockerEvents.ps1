@@ -1,58 +1,83 @@
 <#
 .SYNOPSIS
-Retrieves and sorts event data from AppLocker logs, removes duplicates, and reports as tab-delimited CSV output, PSCustomObjects, or as an Excel worksheet.
-
-TODO: Add support for "Packaged app-Execution"
+Retrieves and sorts event data from AppLocker logs, synthesizes data, and reports as tab-delimited CSV output, PSCustomObjects, or as an Excel worksheet.
 
 .DESCRIPTION
-Any fields can be omitted from the output; removing fields with unique data such as event time can result
-in removal of more lines that otherwise contain duplicated data.
+Get-AppLockerEvents.ps1 retrieves AppLocker event data from live or saved event logs on the local or a remote computer in a manner that makes analysis much easier than the raw data itself.
+In addition to reporting the raw data from the logs, Get-AppLockerEvents.ps1 synthesizes data so that commonalities between events involving different users or computers can be aggregated.
+Output can be tab-delimited CSV (the default), an array of PSCustomObjects, or a formatted Excel worksheet.
 
-AppLocker logs can be saved event log files, or live event logs on the local or a named remote computer.
+By default, the script retrieves error and warning events from the AppLocker EXE/DLL, MSI/Script, and Packaged app-Execution event logs on the local computer.
+You can specify a remote computer, omit one or two of the default logs. AppLocker in audit mode produces warning events ("would have been blocked"), while enforce mode produces error events ("was blocked").
+You can choose to report only errors, only warnings, only allowed (information) events, or all events.
 
-Output can be tab-delimited CSV, an array of PSCustomObject, or a formatted Excel worksheet.
+For forwarded events, you can retrieve from the ForwardedEvents log, and/or named event logs if you've forwarded AppLocker events to log(s) other than to ForwardedEvents.
+Instead of live logs, you can specify the paths to one or more exported .evtx event log files.
 
-By default, retrieves error and warning events from both the EXE/DLL and MSI/Script event logs on the local computer.
-Live-log options include reading events from a remote computer, reading from one of the EXE/DLL and MSI/Script logs
-instead of both, or reading from the "Forwarded Events" event log on the local or a remote computer.
-Optionally, read from one or more saved .evtx files.
+The -FromDateTime and -ToDateTime options enable you to limit events to time ranges.
 
-By default, retrieves error and warning events. AppLocker in audit mode produces warning events ("would have been blocked"), while enforce mode produces error events ("was blocked").
-Optionally, read just errors, just warnings, just information events (file was allowed), or all events.
-
-Data from each event (minus any omitted fields) is turned into a line of tab-delimited CSV. These lines are then sorted
-and duplicates are removed. When fields containing more unique data are omitted, the remaining data will tend to have more
-duplication and more lines will be removed. See the detailed parameter descriptions for more information.
+Data from each event is turned into a line of tab-delimited CSV. Lines are sorted before being output.
 
 Random-named temporary files created by PowerShell to test whitelisting policy are filtered out by default.
 
-Use the -ComputerName parameter to name a remote computer from which to retrieve events.
-Use the -WarningOnly, -ErrorOnly, -Allowed, or -AllEvents switches to retrieve events other than errors+warnings.
-Use the -ExeAndDllOnly or -MsiAndScriptOnly switches to retrieve events only from one of the two live event logs.
-Use the -ForwardedEvents switch to read from the ForwardedEvents log instead of from the EXE/DLL and MSI/Script logs.
+Use the -ComputerName parameter to name a remote computer from which to retrieve live-log events (default logs or event collectors).
+Use the -WarningOnly, -ErrorOnly, -AllowedOnly, or -AllEvents switches to retrieve events other than errors and warnings.
+Use the -NoExeAndDll, -NoMsiAndScript, and -NoPackagedAppExec switches not to retrieve events from one or two default AppLocker logs.
+Use the -ForwardedEvents switch to read from the ForwardedEvents log instead of from the default AppLocker logs.
+Use -EventLogNames to specify the names of logs where AppLocker events were forwarded.
 Use the -EvtxLogFilePaths parameter to name one or more saved event log files to read.
 Use the -FromDateTime and -ToDateTime parameters to restrict the date/time range to report.
 Use the -NoPsFilter switch not to filter out random-named PowerShell policy test script files.
-Use the other -No* switches to omit fields from the output. -NoEventTime, -NoEventTimeXL, and -NoPID are the most important for reducing output size.
 
 See the detailed parameter descriptions for more information.
 
+Output fields:
+
+* GenericPath   is the original file path with "%LOCALAPPDATA%" replacing the beginning of the path name
+                if it matches the typical pattern "C:\Users\[username]\AppData\Local".
+                Makes similar replacements for "%APPDATA%" or "%USERPROFILE%" if LOCALAPPDATA isn't applicable.
+* GenericDir    is the directory-name portion of GenericPath (i.e., with the filename removed).
+* OriginalPath  is the file path exactly as reported in the AppLocker event log data.
+                If a file is used by multiple users, OriginalPath often includes differentiating information such as user profile name.
+* FileName      is the logged filename (including extension) by itself without path information.
+* FileExt       is the file extension of the logged file. This can be useful to track files with non-standard file extensions. (Always left empty for packaged apps.)
+* FileType      is EXE, DLL, MSI, SCRIPT, or APPX.
+* PublisherName for signed files is the distinguished name (DN) of the file's digital signer. PublisherName is blank or just a hyphen if the file is not signed by a trusted publisher.
+* ProductName   for signed files is the product name taken from the file's version resource.
+* BinaryName    for signed files is the "OriginalName" field taken from the file's version resource.
+* FileVersion   for signed files is the binary file version taken from the file's version resource.
+* Hash          represents the file's SHA256 hash. In addition to being incorporated in rule data, the hash data can help determine whether two files are identical.
+* UserSID       is the security identifier (SID) of the user that ran or tried to run the file.
+* UserName      is the result of SID-to-name translation of the UserSID value performed on the local computer.
+* MachineName   is the computer name on which the event was logged.
+* EventTime     is the date and time that the event occurred, in the computer's local time zone and rendered in this sortable format "yyyy-MM-ddTHH:mm:ss.fffffff".
+                For example, June 13, 2018, 6:49pm plus 17.7210233 seconds is reported as 2018-06-13T18:49:17.7210233.
+* EventTimeXL   is the date and time that the event occurred, in the computer's local time zone and rendered in a format that Excel recognizes as a date/time, and its filter dropdown renders in a tree view.
+* PID           is the process ID. It can be used to correlate EXE files and other file types, including scripts and DLLs.
+                Note that a PID is a unique identifier only on the computer the process is running on and only while it is running. When the process exits, the PID value can be assigned to another process.
+* EventType     is "Information," "Warning," or "Error," which can be particularly helpful with -AllEvents, as it's not otherwise possible to tell whether the file was allowed.
+
 .PARAMETER ComputerName
-Inspects events on the named remote computer instead of the local computer. Caller must have administrative rights on the remote computer.
+Retrieves event data from live event logs on the named remote computer instead of the local computer. Caller must have administrative rights on the remote computer.
+(Can be used in DefaultAppLockerLogs or LiveWEFLogs mode, but not in SavedLogs mode.)
 
-.PARAMETER ExeAndDllOnly
-Retrieves only from the EXE and DLL log (doesn't retrieve from the MSI and Script log).
-If neither -ExeAndDllOnly or -MsiAndScriptOnly are specified, retrieves from both logs.
+.PARAMETER NoExeAndDll
+When specified in DefaultAppLockerLogs mode, does not retrieve events from the AppLocker EXE and DLL log.
 
-.PARAMETER MsiAndScriptOnly
-Retrieves only from the MSI and Script log (doesn't retrieve from the EXE and DLL log).
-If neither -ExeAndDllOnly or -MsiAndScriptOnly are specified, retrieves from both logs.
+.PARAMETER NoMsiAndScript
+When specified in DefaultAppLockerLogs mode, does not retrieve events from the AppLocker MSI and Script log.
+
+.PARAMETER NoPackagedAppExec
+When specified in DefaultAppLockerLogs mode, does not retrieve events from the AppLocker Packaged app-Execution log.
 
 .PARAMETER ForwardedEvents
-Retrieves from the ForwardedEvents log instead of from the EXE/DLL and MSI/Script logs.
+Retrieves events from the ForwardedEvents log instead of from the default AppLocker logs. Can also be used with -EventLogNames.
+
+.PARAMETER EventLogNames
+Retrieves events from the named live event logs. (Intended for use with Windows Event Collectors.) Can also be used with -ForwardedEvents.
 
 .PARAMETER EvtxLogFilePaths
-Specifies path to one or more saved event log files. (Cannot be used with -ComputerName, -ExeAndDllOnly, or -MsiAndScriptOnly.)
+Specifies path to one or more saved .evtx event log files.
 
 .PARAMETER WarningOnly
 Reports only Warning events (AuditOnly mode; "would have been blocked"), instead of Errors + Warnings.
@@ -60,7 +85,7 @@ Reports only Warning events (AuditOnly mode; "would have been blocked"), instead
 .PARAMETER ErrorOnly
 Reports only Error events (Enforce mode; files actually blocked), instead of Errors + Warnings.
 
-.PARAMETER Allowed
+.PARAMETER AllowedOnly
 Reports only Information events (files allowed to run) instead of Errors + Warnings.
 
 .PARAMETER AllEvents
@@ -74,84 +99,6 @@ Can be used with -ToDateTime to specify a date/time range. Date/time specified i
 Reports only events on or before the specified date or date-time. E.g., -ToDateTime "9/7/2017" or -ToDateTime "9/7/2017 12:00:00"
 Can be used with -FromDateTime to specify a date/time range. Date/time specified in local time zone.
 
-.PARAMETER NoGenericPath
-GenericPath is the original file path with "%LOCALAPPDATA%" replacing the beginning of the path name if it matches the typical pattern "C:\Users\[username]\AppData\Local".
-Makes similar replacements for "%APPDATA%" or "%USERPROFILE%" if LOCALAPPDATA isn't applicable.
-If -NoGenericPath is specified, GenericPath data is not included in the output.
-
-.PARAMETER NoGenericDir
-GenericDir is the directory-name portion of GenericPath (i.e., with the filename removed).
-If -NoGenericDir is specified, GenericDir data is not included in the output.
-
-.PARAMETER NoOriginalPath
-OriginalPath is the file path exactly as reported in the AppLocker event log data.
-If a file is used by multiple users, OriginalPath often includes differentiating information such as user profile name.
-If -NoOriginalPath is specified, OriginalPath data is not included in the output. This can be useful when aggregating data from many users running the same programs.
-
-.PARAMETER NoFileName
-FileName is the logged filename (including extension) by itself without path information.
-If -NoFileName is specified, FileName data is not included in the output.
-
-.PARAMETER NoFileExt
-FileExt is the file extension of the logged file. This can be useful to track files with non-standard file extensions.
-If -NoFileExt is specified, FileExt data is not included in the output.
-
-.PARAMETER NoFileType
-FileType is "EXE," "DLL," "MSI," or "SCRIPT."
-If -NoFileType is specified, FileType data is not included in the output.
-
-.PARAMETER NoPublisherName
-For signed files, PublisherName is the distinguished name (DN) of the file's digital signer. PublisherName is blank or just a hyphen if the file is not signed by a trusted publisher.
-If -NoPublisherName is specified, PublisherName data is not included in the output.
-
-.PARAMETER NoProductName
-For signed files, ProductName is the product name taken from the file's version resource.
-If -NoProductName is specified, ProductName data is not included in the output.
-
-.PARAMETER NoBinaryName
-For signed files, BinaryName is the "OriginalName" field taken from the file's version resource.
-If -NoBinaryName is specified, BinaryName data is not included in the output.
-
-.PARAMETER NoFileVersion
-For signed files, FileVersion is the binary file version taken from the file's version resource.
-If -NoFileVersion is specified, FileVersion data is not included in the output.
-
-.PARAMETER NoHash
-The Hash field, if included, represents the file's SHA256 hash. In addition to being incorporated in rule data, the hash data can help determine whether two files are identical.
-If -NoHash is specified, the file's SHA256 hash data is not included in the output.
-
-.PARAMETER NoUserSID
-UserSID is the security identifier (SID) of the user that ran or tried to run the file.
-If -NoUserSID is specified, UserSID data is not included in the output.
-If a file is used by different users, UserSID is differentiating. -NoUserSID can be useful when aggregating data from many users running the same programs.
-
-.PARAMETER NoUserName
-UserName is the result of SID-to-name translation of the UserSID value performed on the local computer.
-If -NoUserName is specified, SID-to-name translation is not attempted and UserName data is not included in the output.
-If a file is used by different users, UserName is differentiating. -NoUserName can be useful when aggregating data from many users running the same programs.
-
-.PARAMETER NoMachineName
-MachineName is the computer name on which the event was logged.
-If -NoMachineName is specified, MachineName data is not included in output. This can be useful when aggregating data forwarded from many computers.
-
-.PARAMETER NoEventTime
-EventTime is the date and time that the event occurred, in the computer's local time zone and rendered in this sortable format "yyyy-MM-ddTHH:mm:ss.fffffff".
-For example, June 13, 2018, 6:49pm plus 17.7210233 seconds is reported as 2018-06-13T18:49:17.7210233.
-If -NoEventTime is specified, EventTime data is not included in the output. This is useful when you want to get at most one event for every file referenced.
-
-.PARAMETER NoEventTimeXL
-EventTimeXL is the date and time that the event occurred, in the computer's local time zone and rendered in a format that Excel recognizes as a date/time, and its filter dropdown renders in a tree view.
-If -NoEventTimeXL is specified, EventTimeXL data is not included in the output. This is useful when you want to get at most one event for every file referenced.
-
-.PARAMETER NoPID
-PID is the process ID. It can be used to correlate EXE files and other file types, including scripts and DLLs.
-If -NoPID is specified, the PID is not included in the output.
-Note that a PID is a unique identifier only on the computer the process is running on and only while it is running. When the process exits, the PID value can be assigned to another process.
-
-.PARAMETER NoEventType
-EventType is "Information," "Warning," or "Error," which can be particularly helpful with -AllEvents, as it's not otherwise possible to tell whether the file was allowed.
-If -NoEventType is specified, EventType data is not included in the output.
-
 .PARAMETER NoAutoNGEN
 If specified, does not report modern-app AutoNGEN files that are unsigned and in the user's profile.
 
@@ -160,7 +107,6 @@ If specified, does not try to filter out random-named PowerShell scripts used to
 
 .PARAMETER NoFilteredMachines
 By default, this script outputs a single artificial "empty" event line for every machine for which all observed events were filtered out.
-If -NoFilteredMachines is specified, these event lines are not output.
 
 .PARAMETER Excel
 If this optional switch is specified, outputs to a formatted Excel rather than tab-delimited CSV text to the pipeline.
@@ -169,42 +115,39 @@ If this optional switch is specified, outputs to a formatted Excel rather than t
 If this optional switch is specified, outputs PSCustomObjects rather than tab-delimited CSV. (Passes CSV through ConvertFrom-Csv.)
 This switch is ignored if -Excel is also specified.
 
-.EXAMPLE
-
-.\Get-AppLockerEvents.ps1 -EvtxLogFilePaths .\ForwardedEvents1.evtx, .\ForwardedEvents2.evtx -NoMachineName -NoEventTime -NoEventTimeXL
-
-Get warning and error events from events exported into ForwardedEvents1.evtx and ForwardedEvents2.evtx; don't include MachineName or EventTime data in the output.
 
 .EXAMPLE
+.\Get-AppLockerEvents.ps1 -NoMsiAndScript -NoPackagedAppExec
 
-.\Get-AppLockerEvents.ps1 -NoOriginalPath -NoEventTime -NoEventTimeXL -NoUserSID | clip.exe
-
-Get warning and error events from the EXE/DLL and MSI/Script logs on the local computer, removing user-specific and time-specific fields, with the goal that each referenced file appears at most once in the output, no matter how many users referenced it or how often. Write the output to the Windows clipboard so that it can be pasted into Microsoft Excel.
-
-.EXAMPLE
-
-.\Get-AppLockerEvents.ps1 -Objects | Where-Object { [datetime]($_.EventTime) -gt "8/20/2017" }
-
-Get warning and error events from the EXE/DLL and MSI/Script logs on the local computer since August 20, 2017.
-It converts output into objects, and pipes those objects into a filter that passes only events with event dates after midnight, August 20, 2017.
+Retrieves warning and error events from the AppLocker EXE and DLL log (MSI/Script and PackagedApp omitted).
 
 .EXAMPLE
-.\Get-AppLockerEvents.ps1 -FromDateTime "8/1/2017" -ToDateTime "9/1/2017"
+.\Get-AppLockerEvents.ps1 -Computer CONTOSO\RECEPTION1 -AllEvents -FromDateTime "6/1/2019 8:00" -ToDateTime "6/1/2019 9:00" -Excel
 
-Gets warning and error events from the EXE/DLL and MSI/Script logs on the local computer between Aug 1, 2017 00:00:00 and Sept 1, 2017 00:00:00.
+Retrieves all AppLocker events for a specified one-hour period on CONTOSO\RECEPTION1, and report in an Excel document.
+
+.EXAMPLE
+.\Get-AppLockerEvents.ps1 -EvtxLogFilePaths .\ForwardedEvents1.evtx, .\ForwardedEvents2.evtx
+
+Get warning and error events from events exported into ForwardedEvents1.evtx and ForwardedEvents2.evtx.
 
 .EXAMPLE
 
-.\Get-AppLockerEvents.ps1 -Allowed -Objects | Group-Object PublisherName
+.\Get-AppLockerEvents.ps1 -Objects | Where-Object { $_.PublisherName -eq "-" }
 
-Get allowed files from the EXE/DLL and MSI/Script logs on the local computer. Convert output into objects, group the objects according to the PublisherName field.
+Get warning and error events from the default AppLocker logs where target file is unsigned (publisher name is "-"). Results are output to the PowerShell pipeline as PSCustomObjects.
 
 .EXAMPLE
 
-.\Get-AppLockerEvents.ps1 -NoOriginalPath -NoEventTime -NoEventTimeXL -NoUserSID -Objects | Where-Object { $_.PublisherName.Length -le 1 } | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation
+.\Get-AppLockerEvents.ps1 -AllowedOnly -Objects | Group-Object PublisherName
 
-Get warning and error events from the EXE/DLL and MSI/Script logs on the local computer, outputting only unsigned files.
-It converts output into objects, filters on PublisherName length (allowing up to a hyphen in length), then converts back to tab-delimited CSV.
+Get allowed files from EXE/DLL, MSI/Script, and PackagedApp logs on the local computer. Convert output into objects, group the objects according to the PublisherName field.
+
+.EXAMPLE
+
+.\Get-AppLockerEvents.ps1 -Objects | Where-Object { $_.PublisherName.Contains("CONTOSO") } | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation
+
+Get warning and error events from the default AppLocker logs on the local computer involving files signed by Contoso, converting back into tab-delimited CSV.
 
 .EXAMPLE
 $ev = .\Get-AppLockerEvents.ps1 -Objects
@@ -213,39 +156,47 @@ $ev.FileExt | Sort-Object -Unique
 
 Output a list of each combination of users and machines reporting events, and a list of all observed file extensions involved with events.
 
-
-
 #>
 
-[CmdletBinding(DefaultParameterSetName="LiveLogs")]
+[CmdletBinding(DefaultParameterSetName="DefaultAppLockerLogs")]
 param(
-    # Optional remote computer name
-    [parameter(Mandatory=$false, ParameterSetName="LiveLogs")]
+    # Optional remote computer name with default AppLocker logs or other live logs
+    [parameter(ParameterSetName="DefaultAppLockerLogs", Mandatory=$false)]
+    [parameter(ParameterSetName="LiveWEFLogs", Mandatory=$false)]
     [String]
     $ComputerName,
 
-    # Which event log(s) to inspect (default is EXE/DLL and MSI/Script logs)
-    [parameter(ParameterSetName="LiveLogs")]
+    # When using default AppLocker logs, can exclude one or two of them.
+    [parameter(ParameterSetName="DefaultAppLockerLogs")]
     [switch]
-    $ExeAndDllOnly = $false,
-    [parameter(ParameterSetName="LiveLogs")]
+    $NoExeAndDll = $false,
+    [parameter(ParameterSetName="DefaultAppLockerLogs")]
     [switch]
-    $MsiAndScriptOnly = $false,
-    [parameter(ParameterSetName="LiveLogs")]
+    $NoMsiAndScript = $false,
+    [parameter(ParameterSetName="DefaultAppLockerLogs")]
+    [switch]
+    $NoPackagedAppExec = $false,
+
+    # Instead of default AppLocker logs, can use ForwardedEvents and/or any named logs
+    [parameter(ParameterSetName="LiveWEFLogs")]
     [switch]
     $ForwardedEvents = $false,
+    [parameter(ParameterSetName="LiveWEFLogs", Mandatory=$false)]
+    [String[]]
+    $EventLogNames,
 
-    [parameter(Mandatory=$false, ParameterSetName="SavedLogs")]
+    # Can use saved event logs instead of live event logs
+    [parameter(ParameterSetName="SavedLogs", Mandatory=$false)]
     [String[]]
     $EvtxLogFilePaths,
 
-    # Which event types to inspect (default is warnings + errors)
+    # Which event types to inspect (default is Warnings + Errors)
     [switch]
     $WarningOnly = $false,
     [switch]
     $ErrorOnly = $false,
 	[switch]
-	$Allowed = $false,
+	$AllowedOnly = $false,
     [switch]
     $AllEvents = $false,
 
@@ -256,44 +207,6 @@ param(
     [parameter(Mandatory=$false)]
     [datetime]
     $ToDateTime,
-
-    # Data to return. Defaults to all, except those switched off with the following switches
-    [switch]
-    $NoGenericPath = $false,
-    [switch]
-    $NoGenericDir = $false,
-    [switch]
-    $NoOriginalPath = $false,
-    [switch]
-    $NoFileName = $false,
-    [switch]
-    $NoFileExt = $false,
-    [switch]
-    $NoFileType = $false,
-    [switch]
-    $NoPublisherName = $false,
-    [switch]
-    $NoProductName = $false,
-    [switch]
-    $NoBinaryName = $false,
-    [switch]
-    $NoFileVersion = $false,
-    [switch]
-    $NoHash = $false,
-    [switch]
-    $NoUserSID = $false,
-    [switch]
-    $NoUserName = $false,
-    [switch]
-    $NoMachineName = $false,
-    [switch]
-    $NoEventTime = $false,
-    [switch]
-    $NoEventTimeXL = $false,
-    [switch]
-    $NoPID = $false,
-    [switch]
-    $NoEventType = $false,
 
     # If specified, does not report modern-app AutoNGEN files that are unsigned and in the user's profile.
     [switch]
@@ -322,10 +235,11 @@ $rootDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
 . $rootDir\Support\Config.ps1
 
 #
-# Strings
+# Strings/IDs
 #
 $ExeDllLogName    = 'Microsoft-Windows-AppLocker/EXE and DLL'
 $MsiScriptLogName = 'Microsoft-Windows-AppLocker/MSI and Script'
+$PkgdAppExecLogName='Microsoft-Windows-AppLocker/Packaged app-Execution'
 $FwdEventsLogName = 'ForwardedEvents'
 $ExeDllAllowed    = 'EventID=8002'
 $ExeDllWarning    = 'EventID=8003'
@@ -333,30 +247,50 @@ $ExeDllError      = 'EventID=8004'
 $MsiScriptAllowed = 'EventID=8005'
 $MsiScriptWarning = 'EventID=8006'
 $MsiScriptError   = 'EventID=8007'
+$PkgdAppAllowed   = 'EventID=8020'
+$PkgdAppWarning   = 'EventID=8021'
+$PkgdAppError     = 'EventID=8022'
 $SubscriptionBkmrk= 'EventID=111'
+$WecBkmarkEventID = 111
+$AppxEventIDs     = (8020, 8021, 8022)
 
 #
 # Event logs to query
 #
-$eventLogs = @()
+[System.Collections.ArrayList]$eventLogs = @()
 
-#
-# Specify event log names to query.
-# If looking at ForwardedEvents, also set XPath to filter on provider so we don't inadvertently get events from sources we don't know about.
-#
+# Not filtering on event provider if we don't have to... (maybe should... Saved WEF log might have events besides AppLocker and EventForwarder... Maybe should just always have it? Perf?)
 $eventProviderFilter = ""
 
-if ($ForwardedEvents)
+Write-Verbose ("ParameterSetName = " + $PSCmdlet.ParameterSetName)
+switch($PSCmdlet.ParameterSetName)
 {
-    $eventLogs += $FwdEventsLogName
-    $eventProviderFilter = "Provider[@Name='Microsoft-Windows-AppLocker' or @Name='Microsoft-Windows-EventForwarder'] and"
+    "DefaultAppLockerLogs"
+    {
+        if (!$NoExeAndDll)       { $eventLogs.Add($ExeDllLogName) | Out-Null }
+        if (!$NoMsiAndScript)    { $eventLogs.Add($MsiScriptLogName) | Out-Null }
+        if (!$NoPackagedAppExec) { $eventLogs.Add($PkgdAppExecLogName) | Out-Null }
+    }
+    
+    "LiveWEFLogs"
+    {
+        # Set XPath to filter on provider so we don't inadvertently get events from sources we don't know about.
+        $eventProviderFilter = "Provider[@Name='Microsoft-Windows-AppLocker' or @Name='Microsoft-Windows-EventForwarder'] and"
+
+        if ($ForwardedEvents)
+        {
+            $eventLogs.Add($FwdEventsLogName) | Out-Null
+        }
+
+        if ($EventLogNames)
+        {
+            # Named log(s) - to support case where Windows Event Collector collects events in one or more logs other than ForwardedEvents
+            $eventLogs.AddRange($EventLogNames)
+        }
+    }
 }
-else
-{
-    if (!$MsiAndScriptOnly) { $eventLogs += $ExeDllLogName }
-    if (!$ExeAndDllOnly) { $eventLogs += $MsiScriptLogName }
-}
-if ($eventLogs.Length -eq 0 -and $EvtxLogFilePaths.Length -eq 0)
+
+if ($eventLogs.Count -eq 0 -and $EvtxLogFilePaths.Length -eq 0)
 {
     Write-Error "No logs to inspect."
     return
@@ -387,25 +321,26 @@ if ($FromDateTime -or $ToDateTime)
 #
 # Event log XPath query: event IDs
 #
-$eventIdFilter = "$ExeDllWarning or $MsiScriptWarning or $ExeDllError or $MsiScriptError"
+$eventIdFilter = "$ExeDllWarning or $MsiScriptWarning or $PkgdAppWarning or $ExeDllError or $MsiScriptError or $PkgdAppError"
 if ($WarningOnly)
 {
-    $eventIdFilter = "$ExeDllWarning or $MsiScriptWarning"
+    $eventIdFilter = "$ExeDllWarning or $MsiScriptWarning or $PkgdAppWarning"
 }
 if ($ErrorOnly)
 {
-    $eventIdFilter = "$ExeDllError or $MsiScriptError"
+    $eventIdFilter = "$ExeDllError or $MsiScriptError or $PkgdAppError"
 }
-if ($Allowed)
+if ($AllowedOnly)
 {
-    $eventIdFilter = "$ExeDllAllowed or $MsiScriptAllowed"
+    $eventIdFilter = "$ExeDllAllowed or $MsiScriptAllowed or $PkgdAppAllowed"
 }
 if ($AllEvents)
 {
-    $eventIdFilter = "$ExeDllAllowed or $MsiScriptAllowed or $ExeDllWarning or $MsiScriptWarning or $ExeDllError or $MsiScriptError"
+    $eventIdFilter = "$ExeDllAllowed or $MsiScriptAllowed or $PkgdAppAllowed or $ExeDllWarning or $MsiScriptWarning or $PkgdAppWarning or $ExeDllError or $MsiScriptError or $PkgdAppError"
 }
-if ($ForwardedEvents -and !$NoFilteredMachines)
+if (($ForwardedEvents -or $EventLogNames) -and !$NoFilteredMachines)
 {
+    # If forwarded events, also pick up subscription bookmark events. (Assume that $EventLogNames implies event collector.)
     $eventIdFilter += " or $SubscriptionBkmrk"
 }
 $eventIdFilter = "($eventIdFilter)"
@@ -420,66 +355,66 @@ Write-Verbose "XPath filter = $filter"
 #
 # More strings: patterns to look for
 #
-# Match partial path in temp directory with form XXXXXXXX.XXX.PS* or __PSScriptPolicyTest_XXXXXXXX.XXX.PS*
-$PsPolicyTestPattern = "\\APPDATA\\LOCAL\\TEMP\\(__PSScriptPolicyTest_)?[A-Z0-9]{8}\.[A-Z0-9]{3}\.PS"
-# Usage:
-#     if ($origPath -match $PsPolicyTestPattern) { $filterOut = !$NoPSFilter }
-# New implementation: PS script policy test file is a one-byte file containing "1". Its SHA256 hash is 0x6B86B273FF34FCE19D6B804EFF5A3F5747ADA4EAA22F1D49C01E52DDB7875B4B 
-# Check for that hash rather than the filepath pattern. The hash will be reliable; the file pattern could give a false positive.
-# (Perf test indicates no benefit of one test over the other.)
-# NOTE: if the content of the test file changes, there will be a new hash value to test for.
-# NOTE: The PowerShell folks started randomizing the content, so hash check no longer works - need to look for filename patterns.
-# $PsPolicyTestFileHash = "0x6B86B273FF34FCE19D6B804EFF5A3F5747ADA4EAA22F1D49C01E52DDB7875B4B"
-# Pattern was: if ($hash -eq $PsPolicyTestFileHash) ...
 
 # Match AutoNGEN native image file path
 $AutoNGENPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Local\\Packages\\.*\\NATIVEIMAGES\\.*\.NI\.(EXE|DLL)$"
 
-# Pattern that can be replaced by %LOCALAPPDATA%
+# PowerShell script-policy-test file - PS creates files in user temp directory and tests against whitelisting policy to determine whether to run in ConstrainedLanguage mode.
+# Filter out those test files by default.
+# Current implementation: match partial path of file in temp directory with form "XXXXXXXX.XXX.PS*" or "__PSScriptPolicyTest_XXXXXXXX.XXX.PS*"
+$PsPolicyTestPattern = "\\APPDATA\\LOCAL\\TEMP\\(__PSScriptPolicyTest_)?[A-Z0-9]{8}\.[A-Z0-9]{3}\.PS"
+<# Implementation notes: attempts to match against a fixed hash value instead of a somewhat complex pattern match.
+    PS script policy test file used to be a one-byte file containing "1", with SHA256 hash = 0x6B86B273FF34FCE19D6B804EFF5A3F5747ADA4EAA22F1D49C01E52DDB7875B4B
+    That ended up colliding with some other Microsoft-catalog-signed file on some machines. Signature check came up positive and test file was allowed, so
+    PS consoles ran in FullLanguage mode instead of ConstrainedLanguage. PS responded by randomizing the files' content, which avoided the collision but made a hash
+    comparison impossible. Current version now contains fixed content with a SHA256 hash = 0x96AD1146EB96877EAB5942AE0736B82D8B5E2039A80D3D6932665C1A4C87DCF7.
+    Don't know how widely-deployed this is, though. For now, sticking with filepath pattern match.
+#>
+
+# Filepath pattern that can be replaced by %LOCALAPPDATA%
 $LocalAppDataPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Local\\"
-# Pattern that can be replaced by %APPDATA%
+# Filepath pattern that can be replaced by %APPDATA%
 $RoamingAppDataPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Roaming\\"
-# Pattern that can be replaced by %USERPROFILE% (after the above already done)
+# Filepath pattern that can be replaced by %USERPROFILE% (after the above already done)
 $UserProfilePattern  = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\"
 
-# Tab
-$t = "`t"
-
-# Properties
-$props = @()
-if (!$NoGenericPath)   { $props += "GenericPath" }
-if (!$NoGenericDir)    { $props += "GenericDir" }
-if (!$NoOriginalPath)  { $props += "OriginalPath" }
-if (!$NoFileName)      { $props += "FileName" }
-if (!$NoFileExt)       { $props += "FileExt" }
-if (!$NoFileType)      { $props += "FileType" }
-if (!$NoPublisherName) { $props += "PublisherName" }
-if (!$NoProductName)   { $props += "ProductName" }
-if (!$NoBinaryName)    { $props += "BinaryName" }
-if (!$NoFileVersion)   { $props += "FileVersion" }
-if (!$NoHash)          { $props += "Hash" }
-if (!$NoUserSID)       { $props += "UserSID" }
-if (!$NoUserName)      { $props += "UserName" }
-if (!$NoMachineName)   { $props += "MachineName" }
-if (!$NoEventTime)     { $props += "EventTime" }
-if (!$NoEventTimeXL)   { $props += "EventTimeXL" }
-if (!$NoPID)           { $props += "PID" }
-if (!$NoEventType)     { $props += "EventType" }
-$headers = $props -join $t
+# Tab-delimited CSV headers
+$headers =
+    "GenericPath"   + "`t" +
+    "GenericDir"    + "`t" +
+    "OriginalPath"  + "`t" +
+    "FileName"      + "`t" +
+    "FileExt"       + "`t" +
+    "FileType"      + "`t" +
+    "PublisherName" + "`t" +
+    "ProductName"   + "`t" +
+    "BinaryName"    + "`t" +
+    "FileVersion"   + "`t" +
+    "Hash"          + "`t" +
+    "UserSID"       + "`t" +
+    "UserName"      + "`t" +
+    "MachineName"   + "`t" +
+    "EventTime"     + "`t" +
+    "EventTimeXL"   + "`t" +
+    "PID"           + "`t" +
+    "EventType"
 
 #
 # Retrieve events
 #
-$ev = @()
+# Could change these Get-WinEvent calls to pass the full $EvtxLogFilePaths or $eventLogs arrays in one go instead of in a loop. *Maybe* better perf at the expense of less progress feedback.
+[System.Collections.ArrayList]$ev = @()
 if ($EvtxLogFilePaths)
 {
     $EvtxLogFilePaths | foreach {
         Write-Host "Calling Get-WinEvent -Path $_ ..." -ForegroundColor Cyan
-        $ev += Get-WinEvent -Path $_ -FilterXPath $filter -ErrorAction SilentlyContinue -ErrorVariable gweErr
+        # Always ensure that $oEvents is an array, whether it contains 0, 1, or more items
+        $oEvents = @(Get-WinEvent -Path $_ -FilterXPath $filter -ErrorAction SilentlyContinue -ErrorVariable gweErr)
         if ($gweErr.Count -gt 0)
         {
             $gweErr | foreach { Write-Host ("--> " + $_.ToString()) -ForegroundColor Cyan }
         }
+        $ev.AddRange($oEvents)
     }
 }
 else
@@ -488,29 +423,29 @@ else
         if ($ComputerName)
         {
             Write-Host "Calling Get-WinEvent -LogName $_ -ComputerName $ComputerName ..." -ForegroundColor Cyan
-            $ev += (Get-WinEvent -LogName $_ -ComputerName $ComputerName -FilterXPath $filter -ErrorAction SilentlyContinue -ErrorVariable gweErr)
+            # Always ensure that $oEvents is an array, whether it contains 0, 1, or more items
+            $oEvents = @(Get-WinEvent -LogName $_ -ComputerName $ComputerName -FilterXPath $filter -ErrorAction SilentlyContinue -ErrorVariable gweErr)
         }
         else
         {
             Write-Host "Calling Get-WinEvent -LogName $_ ..." -ForegroundColor Cyan
-            $ev += (Get-WinEvent -LogName $_ -FilterXPath $filter -ErrorAction SilentlyContinue -ErrorVariable gweErr)
+            # Always ensure that $oEvents is an array, whether it contains 0, 1, or more items
+            $oEvents = @(Get-WinEvent -LogName $_ -FilterXPath $filter -ErrorAction SilentlyContinue -ErrorVariable gweErr)
         }
         if ($gweErr.Count -gt 0)
         {
             $gweErr | foreach { Write-Host ("--> " + $_.ToString()) -ForegroundColor Cyan }
         }
+        $ev.AddRange($oEvents)
     }
 }
 Write-Host ($ev.Count.ToString() + " events retrieved.") -ForegroundColor Cyan
 
-#TODO: Figure out whether/when only one works, and why: Xml vs. Get-WinEvent objects
-$UseXml = $true
-
 #
 # Create output array; add CSV headers
 #
-$csv = @()
-$csv += $headers
+[System.Collections.ArrayList]$csv = @()
+$csv.Add($headers) | Out-Null
 
 #
 # Lookups
@@ -555,72 +490,66 @@ function SidToNameLookup([string]$sid)
 #
 $count = 0
 $filteredOut = 0
-$csv += (
+$oLines = @(
     $ev | foreach {
 
-        # Implement options to hide items that match PowerShell policy test script or AutoNGEN native images:
+        <# 
+            For all Microsoft-Windows-AppLocker events here, indexes into Properties array:
+                1: PolicyName (EXE, DLL, MSI, SCRIPT, APPX)
+                7: TargetUser --> System.Security.Principal.SecurityIdentifier, with Value property that is [string] User SID
+                8: TargetProcessId
+            For Appx:
+                10: Package
+                12: Fqbn
+            For all others:
+                10: FilePath
+                11: FileHashLength
+                12: FileHash
+                14: Fqbn
+        #>
+
+        # Whether to filter out this particular event from the output
         $filterOut = $false
 
-        <#
-            Event ID 111 (should maybe also check $_.ProviderName -eq "Microsoft-Windows-EventForwarder") indicates an artificial
-            event created on the Windows event collector when a client system creates a subscription.
-            Use it to identify systems that were able to forward events but didn't.
-            Example event XML:
+        # Determine whether it's a Windows Event Collector bookmark event
+        $isWecBkmark = $_.Id -eq $WecBkmarkEventID
+        # Determine whether it's an APPX event
+        $isAppxEvent = $_.Id -in $AppxEventIDs
+        # If it's neither a WEC bookmark nor an APPX event, it's expected to be EXE, DLL, MSI, or SCRIPT
 
-            <?xml version="1.0"?>
-            <Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
-              <System>
-                <Provider Name="Microsoft-Windows-EventForwarder"/>
-                <EventID>111</EventID>
-                <TimeCreated SystemTime="2018-03-02T21:04:42.797Z"/>
-                <Computer>myworkstation.contoso.com</Computer>
-              </System>
-              <SubscriptionBookmarkEvent>
-                <SubscriptionId/>
-              </SubscriptionBookmarkEvent>
-            </Event>
-        #>
-        if ($_.Id -eq 111)
+        # Don't access or manipulate any properties unless and until they're needed
+
+        if ($isWecBkmark)
         {
-            # Bookmark event
+            # Bookmark event; filter out this event (but capture machine info)
             $filterOut = $true
         }
-        else
+        elseif (!$isAppxEvent)
         {
-            $xEv = $null
-            $xData = $null
-    
-            if ($UseXml -or $null -eq $_.Properties[0])
+            # 1: PolicyName (here expected to be EXE, DLL, MSI, or SCRIPT)
+            $filetype = $_.Properties[1].Value
+            # 10: FilePath
+            $origPath = $_.Properties[10].Value
+            # Filter out events that match patterns; do the match only if relevant for the file type
+            if ($filetype -eq "SCRIPT" -and !$NoPSFilter)
             {
-                $xEv = [xml]($_.ToXml())
-                $xData = $xEv.Event.UserData.RuleAndFileData
-                $origPath = $xData.FilePath
-                $hash = "0x" + $xData.FileHash
-                $sPID = $xData.TargetProcessId
+                # PowerShell policy-test file (filtered out by default)
+                $filterOut = ($origPath -match $PsPolicyTestPattern)
             }
-            else
+            elseif ($filetype -in ("EXE", "DLL") -and $NoAutoNGEN)
             {
-                $origPath = $_.Properties[10].Value               # File path
-                $hash = "0x" + [System.BitConverter]::ToString( $_.Properties[12].Value ).Replace('-', '')
-                $sPID = $_.Properties[8].Value
-            }
-
-            if ($origPath -match $PsPolicyTestPattern)
-            {
-                $filterOut = !$NoPSFilter
-            }
-            elseif ($origPath -match $AutoNGENPattern)
-            {
-                $filterOut = $NoAutoNGEN
+                # AutoNGEN (not filtered out by default)
+                $filterOut = ($origPath -match $AutoNGENPattern)
             }
         }
 
         if ($filterOut) { $filteredOut++ }
 
+        # Unless not reporting on machines with no events, capture machine name so we can report that it's receiving policy.
         if (!$NoFilteredMachines)
         {
-            # Observed machines
-            $machineName = $_.MachineName                 # Computer name
+            # Capture some information about observed machines, in case all events related to the computer are filtered.
+            $machineName = $_.MachineName
             if (!$AllMachineNames.ContainsKey($machineName))
             {
                 # All observed machines
@@ -633,14 +562,20 @@ $csv += (
             }
         }
 
+        # If not filtered out, build out the event data
         if (!$filterOut)
         {
-            $timeCreated = $_.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss.fffffff") # alpha sort = chronological sort; granularity = ten millionths of a second
-            $machineName = $_.MachineName                 # Computer name
+            # Computer name
+            $machineName = $_.MachineName
+            # high-granularity date/time where alpha sort = chronological sort; granularity = ten millionths of a second
+            $timeCreated = $_.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss.fffffff") 
+            # Date/time format that Excel recognizes as date/time
+            #TODO: Verify that regional preferences don't interfere with making this useful...
+            $timeCreatedXL = $timeCreated.Replace("T", " ").Substring(0, 19)
 
             # Manual text conversion in case LevelDisplayName is not populated
             if(![string]::IsNullOrEmpty($_.LevelDisplayName)){
-                $eventType   = $_.LevelDisplayName            # Event type (Information, Warning, Error)
+                $eventType = $_.LevelDisplayName            # Event type (Information, Warning, Error)
             }
             else{
                 $eventType = switch($_.Level)
@@ -654,55 +589,70 @@ $csv += (
                 }
             }
 
-            if ($null -eq $xData)
+            # 7: TargetUser --> System.Security.Principal.SecurityIdentifier, with Value property that is [string] User SID
+            $userSid = $_.Properties[7].Value.Value
+            $username = SidToNameLookup -sid $userSid
+            # 8: TargetProcessId
+            $sPID = $_.Properties[8].Value
+
+            if ($isAppxEvent)
             {
-                $filetype = $_.Properties[1].Value            # EXE, DLL, MSI, or SCRIPT
-                $userSid = $_.Properties[7].Value.Value       # User SID (System.Security.Principal.SecurityIdentifier)
-                $pubInfo = $_.Properties[14].Value.Split("\") # Publisher info, separated with backslashes
-                # $hash = "0x" + [System.BitConverter]::ToString( $_.Properties[12].Value ).Replace('-', '')
+                # 1: PolicyName (here expected to be APPX)
+                $filetype = $_.Properties[1].Value
+                # 10: Package
+                $origPath = $_.Properties[10].Value
+                $filename = $genpath = $gendir = $origPath
+                $fileext = [string]::Empty
+                $hash = "N/A"
+                $pubInfo = $_.Properties[12].Value.Split("\") # Publisher info, separated with backslashes
             }
             else
             {
-                $filetype = $xData.PolicyName
-                $userSid = $xData.TargetUser
-                $pubInfo = $xData.Fqbn.Split("\")
-                # $hash = "0x" + $xData.FileHash
+                # Already got $filetype and $origPath earlier
+                $filename = [System.IO.Path]::GetFileName($origPath)
+                $fileext = [System.IO.Path]::GetExtension($origPath)
+                # Generic path replaces user-specific paths with more generic variable syntax.
+                # Userprofile has to be performed after more specific appdata replacements.
+                $genpath = (($origPath -replace $LocalAppDataPattern, "%LOCALAPPDATA%\") -replace $RoamingAppDataPattern, "%APPDATA%\") -replace $UserProfilePattern, "%USERPROFILE%\"
+                $gendir = [System.IO.Path]::GetDirectoryName($genpath)
+
+                if ($_.Properties[11].Value -ne 0)
+                {
+                    $hash = "0x" + [System.BitConverter]::ToString( $_.Properties[12].Value ).Replace('-', '')
+                }
+                else
+                {
+                    $hash = [string]::Empty
+                }
+
+                $pubInfo = $_.Properties[14].Value.Split("\") # Publisher info, separated with backslashes
             }
 
+            # Break up Fqdn publisher info
             $pubName = $pubInfo[0]                        # Publisher name
             $prodName = $pubInfo[1]                       # Product name (syntax works even if array not this long)
             $binaryName = $pubInfo[2]                     # Original "binary" name (syntax works even if array not this long)
             $filever = $pubInfo[3]                        # File version (syntax works even if array not this long)
-            $filename = [System.IO.Path]::GetFileName($origPath)
-            $fileext = [System.IO.Path]::GetExtension($origPath)
-            # Generic path replaces user-specific paths with more generic variable syntax.
-            # Userprofile has to be performed after more specific appdata replacements.
-            $genpath = (($origPath -replace $LocalAppDataPattern, "%LOCALAPPDATA%\") -replace $RoamingAppDataPattern, "%APPDATA%\") -replace $UserProfilePattern, "%USERPROFILE%\"
-            $gendir = [System.IO.Path]::GetDirectoryName($genpath)
 
-            #Anyone wants objects, they can ConvertFrom-Csv.
-            $data = @()
-            if (!$NoGenericPath)   { $data += $genpath }
-            if (!$NoGenericDir)    { $data += $gendir }
-            if (!$NoOriginalPath)  { $data += $origPath }
-            if (!$NoFileName)      { $data += $filename }
-            if (!$NoFileExt)       { $data += $fileext }
-            if (!$NoFileType)      { $data += $filetype }
-            if (!$NoPublisherName) { $data += $pubName }
-            if (!$NoProductName)   { $data += $prodName }
-            if (!$NoBinaryName)    { $data += $binaryName }
-            if (!$NoFileVersion)   { $data += $filever }
-            if (!$NoHash)          { $data += $hash }
-            if (!$NoUserSID)       { $data += $userSID }
-            if (!$NoUserName)      { $data += SidToNameLookup $userSid }
-            if (!$NoMachineName)   { $data += $machineName }
-            if (!$NoEventTime)     { $data += $timeCreated }
-            #TODO: Verify that regional preferences don't interfere with making this useful...
-            if (!$NoEventTimeXL)   { $data += $timeCreated.Replace("T", " ").Substring(0, 19) }
-            if (!$NoPID)           { $data += $sPID }
-            if (!$NoEventType)     { $data += $eventType }
-            # Output the data as CSV
-            $data -join $t
+            # Output tab-delimited CSV (faster to do this and then convert to objects later than to create objects to begin with)
+            $genpath       + "`t" +
+            $gendir        + "`t" +
+            $origPath      + "`t" +
+            $filename      + "`t" +
+            $fileext       + "`t" +
+            $filetype      + "`t" +
+            $pubName       + "`t" +
+            $prodName      + "`t" +
+            $binaryName    + "`t" +
+            $filever       + "`t" +
+            $hash          + "`t" +
+            $userSID       + "`t" +
+            $username      + "`t" +
+            $machineName   + "`t" +
+            $timeCreated   + "`t" +
+            $timeCreatedXL + "`t" +
+            $sPID          + "`t" +
+            $eventType
         }
 
         $count++
@@ -711,44 +661,44 @@ $csv += (
             Write-Host "." -NoNewline -ForegroundColor Cyan
             $count = 0
         }
-    } | Sort-Object -Unique
+    } | Sort-Object
 )
+$csv.AddRange($oLines)
 
 #
 # Unless specified otherwise, also output "empty" events for machines for which all events were filtered out
 #
 if (!$NoFilteredMachines)
 {
-    $csv += (
+    $oLines = @(
         $AllMachineNames.Keys | Sort-Object | foreach {
             $machineName = $_
             # If machine observed but not reported, report it now
             if (!$ReportedMachines.ContainsKey($machineName))
             {
-                $data = @()
-                if (!$NoGenericPath)   { $data += "" }
-                if (!$NoGenericDir)    { $data += "" }
-                if (!$NoOriginalPath)  { $data += "" }
-                if (!$NoFileName)      { $data += "" }
-                if (!$NoFileExt)       { $data += "" }
-                if (!$NoFileType)      { $data += "NONE" }
-                if (!$NoPublisherName) { $data += "" }
-                if (!$NoProductName)   { $data += "" }
-                if (!$NoBinaryName)    { $data += "" }
-                if (!$NoFileVersion)   { $data += "" }
-                if (!$NoHash)          { $data += "" }
-                if (!$NoUserSID)       { $data += "" }
-                if (!$NoUserName)      { $data += "" }
-                if (!$NoMachineName)   { $data += $machineName }
-                if (!$NoEventTime)     { $data += "" }
-                if (!$NoEventTimeXL)   { $data += "" }
-                if (!$NoPID)           { $data += "" }
-                if (!$NoEventType)     { $data += "FILTERED" }
                 # Output the data as CSV
-                $data -join $t
+                <# GenericPath   #>  "" + "`t" +
+                <# GenericDir    #>  "" + "`t" +
+                <# OriginalPath  #>  "" + "`t" +
+                <# FileName      #>  "" + "`t" +
+                <# FileExt       #>  "" + "`t" +
+                <# FileType      #>  "NONE" + "`t" +
+                <# PublisherName #>  "" + "`t" +
+                <# ProductName   #>  "" + "`t" +
+                <# BinaryName    #>  "" + "`t" +
+                <# FileVersion   #>  "" + "`t" +
+                <# Hash          #>  "" + "`t" +
+                <# UserSID       #>  "" + "`t" +
+                <# UserName      #>  "" + "`t" +
+                <# MachineName   #>  $machineName + "`t" +
+                <# EventTime     #>  "" + "`t" +
+                <# EventTimeXL   #>  "" + "`t" +
+                <# PID           #>  "" + "`t" +
+                <# EventType     #>  "FILTERED"
             }
         }
     )
+    $csv.AddRange($oLines)
 }
 
 Write-Host "" # New line after the dots
@@ -774,7 +724,7 @@ else
 }
 
 <#
-    Template for 8002, 8003, and 8004 events (and 8005, 8006, and 8007):
+    Template for "EXE and DLL" and "MSI and Script" 8002, 8003, 8004, 8005, 8006, and 8007 events:
     <template xmlns="http://schemas.microsoft.com/win/2004/08/events">
       <data name="PolicyNameLength" inType="win:UInt16" outType="xs:unsignedShort"/>
       <data name="PolicyNameBuffer" inType="win:UnicodeString" outType="xs:string" length="PolicyNameLength"/>
@@ -793,4 +743,38 @@ else
       <data name="Fqbn" inType="win:UnicodeString" outType="xs:string" length="FqbnLength"/>
       <data name="TargetLogonId" inType="win:HexInt64" outType="win:HexInt64"/>
     </template>
+
+    Template for "Packaged app-Execution" 8020, 8021, and 8022 events:
+    <template xmlns="http://schemas.microsoft.com/win/2004/08/events">
+      <data name="PolicyNameLength" inType="win:UInt16" outType="xs:unsignedShort"/>
+      <data name="PolicyNameBuffer" inType="win:UnicodeString" outType="xs:string" length="PolicyNameLength"/>
+      <data name="RuleId" inType="win:GUID" outType="xs:GUID"/>
+      <data name="RuleNameLength" inType="win:UInt16" outType="xs:unsignedShort"/>
+      <data name="RuleNameBuffer" inType="win:UnicodeString" outType="xs:string" length="RuleNameLength"/>
+      <data name="RuleSddlLength" inType="win:UInt16" outType="xs:unsignedShort"/>
+      <data name="RuleSddlBuffer" inType="win:UnicodeString" outType="xs:string" length="RuleSddlLength"/>
+      <data name="TargetUser" inType="win:SID" outType="xs:string"/>
+      <data name="TargetProcessId" inType="win:UInt32" outType="win:PID"/>
+      <data name="PackageLength" inType="win:UInt16" outType="xs:unsignedShort"/>
+      <data name="PackageBuffer" inType="win:UnicodeString" outType="xs:string" length="PackageLength"/>
+      <data name="FqbnLength" inType="win:UInt16" outType="xs:unsignedShort"/>
+      <data name="Fqbn" inType="win:UnicodeString" outType="xs:string" length="FqbnLength"/>
+    </template>
+
+    Event ID 111 with $_.ProviderName -eq "Microsoft-Windows-EventForwarder" indicates an artificial
+    event created on the Windows event collector when a client system creates a subscription.
+    Use it to identify systems that were able to forward events but didn't.
+    Example event XML:
+    <?xml version="1.0"?>
+    <Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+        <System>
+        <Provider Name="Microsoft-Windows-EventForwarder"/>
+        <EventID>111</EventID>
+        <TimeCreated SystemTime="2018-03-02T21:04:42.797Z"/>
+        <Computer>myworkstation.contoso.com</Computer>
+        </System>
+        <SubscriptionBookmarkEvent>
+        <SubscriptionId/>
+        </SubscriptionBookmarkEvent>
+    </Event>
 #>

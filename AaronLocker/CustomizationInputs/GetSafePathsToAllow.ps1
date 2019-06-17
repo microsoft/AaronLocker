@@ -20,7 +20,7 @@ SUBST drive letters, as the user can change their definitions. If X: is mapped t
 in that share whether it is referenced as \\MYSERVER\Apps\MyProgram.exe or as X:\MyProgram.exe. Similarly,
 AppLocker does the right thing with SUBSTed drive letters.
 
-TODO: At some point, reimplement with hashtable output supporting "label" and "RuleCollection" properties so that path rules have more descriptive names, and can be applied to specific rule collections>
+TODO: At some point, reimplement with hashtable output supporting "label" and "RuleCollection" properties so that path rules have more descriptive names, and can be applied to specific rule collections.
 
 #>
 
@@ -53,5 +53,3 @@ if ($null -ne $cs)
 ### Windows Defender put their binaries in ProgramData for a while. Comment this back out when they move it back.
 "%OSDRIVE%\PROGRAMDATA\MICROSOFT\WINDOWS DEFENDER\PLATFORM\*"
 
-# Windows upgrade
-'C:\$WINDOWS.~BT\Sources\*'

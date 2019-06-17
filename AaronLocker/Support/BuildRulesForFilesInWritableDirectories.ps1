@@ -16,7 +16,7 @@ The rules' EnforcementMode is left NotConfigured. (Create-Policies.ps1 takes car
 
 File system objects can be identified on the command line with -FileSystemPaths, or listed in a file (one object per line) referenced by -FileOfFileSystemObjects.
 
-This script determines whether each object is a file or a directory. For directories, this script enumerates and identifies EXE, DLL, and Script files based on file extension. Subdirectories are scanned if the -RecurseDirectories switch is specified on the command line.
+This script determines whether each object is a file or a directory. For directories, this script enumerates and identifies EXE, DLL, and Script files based on file extension; it then inspects files with unrecognized extensions and identifies those that are actually EXE or DLL files. Subdirectories are scanned if the -RecurseDirectories switch is specified on the command line.
 
 The intent of this script is to create fragments of policies that can be incorporated into a "master" policy in a modular way. For example, create a file representing the rules needed to allow OneDrive to run, and separate files for LOB apps. If/when the OneDrive rules need to be updated, they can be updated in isolation and those results incorporated into a new master set.
 
@@ -181,7 +181,7 @@ switch ($PubRuleGranularity)
 }
 
 # Array of AppLocker File Information objects
-$arrALFI = @()
+[System.Collections.ArrayList]$arrALFI = @()
 # Hash table of rules with redundant entries removed
 $pubPolicies = @{}
 $hashPolicies = @{}
@@ -227,22 +227,22 @@ foreach($fsp in $FileSystemPaths)
                 # But this script drops .msi, .msp, .mst, and .appx
                 # filesNotInspected are the files Get-AppLockerFileInformation -Directory ignored.
                 # If any of them are Win32 exe/dll files, pick them up too
-                $filesNotInspected = @()
+                [System.Collections.ArrayList]$filesNotInspected = @()
                 # Don't need to look at files with extensions that Get-AppLockerFileInformation already looked at, nor extensions that should never be PE files.
                 $extsToIgnore = $GetAlfiDefaultExts + $NeverExecutableExts
                 if ($RecurseDirectories)
                 {
-                    $arrALFI += Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp -Recurse
+                    $arrALFI.AddRange( @(Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp -Recurse) )
                     # Get all files with extensions that haven't been inspected. (Would have used -Exclude with gci but it doesn't interact well with -File - bug?)
-                    $filesNotInspected = Get-ChildItem -Recurse -Path $fsp -Force -File | 
-                        Where-Object { $_.Extension -notin $extsToIgnore }
+                    $filesNotInspected.AddRange( @(Get-ChildItem -Recurse -Path $fsp -Force -File | 
+                        Where-Object { $_.Extension -notin $extsToIgnore } ))
                 }
                 else
                 {
-                    $arrALFI += Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp
+                    $arrALFI.AddRange( @(Get-AppLockerFileInformation -FileType Exe,Dll,Script -Directory $fsp) )
                     # Get all files with extensions that haven't been inspected. (Would have used -Exclude with gci but it doesn't interact well with -File - bug?)
-                    $filesNotInspected = Get-ChildItem -Path $fsp -Force -File | 
-                        Where-Object { $_.Extension -notin $extsToIgnore }
+                    $filesNotInspected.AddRange( @( Get-ChildItem -Path $fsp -Force -File | 
+                        Where-Object { $_.Extension -notin $extsToIgnore } ))
                 }
                 # Look at all the files not yet inspected and capture information for those that are Win32 EXE/DLLs with non-standard extensions.
                 foreach( $fileToInspect in $filesNotInspected )
@@ -258,14 +258,14 @@ foreach($fsp in $FileSystemPaths)
                         # Temporarily add the standard extension after an identifiable marker that we can remove later.
                         $alfi.Path.Path += $filenameMarker + $StdPeExt
                         # Now add it to the collection of AppLockerFileInformation objects to build rules for.
-                        $arrALFI += $alfi
+                        $arrALFI.Add( $alfi ) | Out-Null
                     }
                 }
             }
             elseif ($fspInfo -is [System.IO.FileInfo])
             {
                 # Item is a file; get applocker information for the file
-                $arrALFI += Get-AppLockerFileInformation -Path $fsp
+                $arrALFI.Add( (Get-AppLockerFileInformation -Path $fsp) ) | Out-Null
             }
             else
             {
@@ -285,7 +285,7 @@ foreach($fsp in $FileSystemPaths)
 }
 
 # If no valid items captured, quit now.
-if ($arrALFI.Length -eq 0)
+if ($arrALFI.Count -eq 0)
 {
     Write-Warning -Message "NO FILES SCANNED."
     return
@@ -441,7 +441,7 @@ foreach($alfi in $arrALFI)
             }
             elseif ($rule -is [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.FileHashRule])
             {
-                #TODO: I think this case is already taken care of now.
+                # (I think this case is already taken care of now.)
                 # If the file is signed (not by Microsoft), publisher rule granularity is publisher-only, and there's already a rule covering this file,
                 # don't generate a hash rule for it.
                 if ($signedFile -and !$MSSigned -and !$pubRuleInclProduct -and $pubPolicies.ContainsKey($rtype + "|" + $pubname))

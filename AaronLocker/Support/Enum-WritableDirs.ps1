@@ -159,6 +159,7 @@ if ($RootDirectory.EndsWith("\")) { $RootDirectory = $RootDirectory.Substring(0,
 # are not a problem. AppContainers never grant additional access; they only reduce access.
 $FilterOut0 = @"
 S-1-3-0
+S-1-5-6
 S-1-5-18
 S-1-5-19
 S-1-5-20

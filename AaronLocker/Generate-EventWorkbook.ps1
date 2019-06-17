@@ -3,7 +3,7 @@
 Produces a multi-tab Excel workbook containing summary and details of AppLocker events to support advanced analysis.
 
 .DESCRIPTION
-Converts the saved output from the Get-AppLockerEvents.ps1 or Save-WEFEvents.ps1 scripts to a multi-tab Excel workbook supporting numerous views of the data, including:
+Converts output from the Get-AppLockerEvents.ps1 or Save-WEFEvents.ps1 scripts to a multi-tab Excel workbook supporting numerous views of the data, including:
 * Summary tab showing date/time ranges of the reported events and other summary information.
 * List of machines reporting events, and the number of events per machine.
 * List of publishers of signed files appearing in events, and the number of events per publisher.
@@ -15,35 +15,25 @@ Converts the saved output from the Get-AppLockerEvents.ps1 or Save-WEFEvents.ps1
 These separate tabs enable quick determination of the files running afoul of AppLocker rules and help quickly determine whether/how to adjust the rules.
 
 .PARAMETER AppLockerEventsCsvFile
-Path to CSV file produced by Get-AppLockerEvents.ps1 or Save-WEFEvents.ps1, ideally without any attributes removed, but must contain at least these: MachineName, PublisherName, ProductName, GenericPath, GenericDir, FileName, FileType, Hash
+Optional path to CSV file produced by Get-AppLockerEvents.ps1 or Save-WEFEvents.ps1.
+If not specified, this script invokes Get-AppLockerEvents.ps1 on the local computer and processes its output.
 
 .PARAMETER SaveWorkbook
-If set, saves workbook to same directory as input file with same file name and default Excel file extension.
+If AppLockerEventsCsvFile is specified and this option is set, the script saves the workbook to the same directory
+as the input file and with the same file name but with the default Excel file extension.
 #>
 
-
+[CmdletBinding(DefaultParameterSetName="GenerateTempCsv")]
 param(
     # Path to CSV file produced by Get-AppLockerEvents.ps1
-    [parameter(Mandatory=$true)]
+    [parameter(ParameterSetName="NamedCsvFile", Mandatory=$true)]
     [String]
     $AppLockerEventsCsvFile, 
 
+    [parameter(ParameterSetName="NamedCsvFile")]
     [switch]
     $SaveWorkbook
 )
-
-if (!(Test-Path($AppLockerEventsCsvFile)))
-{
-    Write-Warning "File not found: $AppLockerEventsCsvFile"
-    return
-}
-
-# Get absolute path to input file. (Note that [System.IO.Path]::GetFullName doesn't do this...)
-$AppLockerEventsCsvFileFullPath = $AppLockerEventsCsvFile
-if (!([System.IO.Path]::IsPathRooted($AppLockerEventsCsvFile)))
-{
-    $AppLockerEventsCsvFileFullPath = [System.IO.Path]::Combine((Get-Location).Path, $AppLockerEventsCsvFile)
-}
 
 $rootDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
 # Get configuration settings and global functions from .\Support\Config.ps1)
@@ -52,6 +42,33 @@ $rootDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
 
 $OutputEncodingPrevious = $OutputEncoding
 $OutputEncoding = [System.Text.ASCIIEncoding]::Unicode
+
+$tempfile = [string]::Empty
+
+if ($AppLockerEventsCsvFile)
+{
+    if (!(Test-Path($AppLockerEventsCsvFile)))
+    {
+        Write-Warning "File not found: $AppLockerEventsCsvFile"
+        return
+    }
+
+    # Get absolute path to input file. (Note that [System.IO.Path]::GetFullName doesn't do this...)
+    $AppLockerEventsCsvFileFullPath = $AppLockerEventsCsvFile
+    if (!([System.IO.Path]::IsPathRooted($AppLockerEventsCsvFile)))
+    {
+        $AppLockerEventsCsvFileFullPath = [System.IO.Path]::Combine((Get-Location).Path, $AppLockerEventsCsvFile)
+    }
+    $dataSourceName = [System.IO.Path]::GetFileName($AppLockerEventsCsvFile)
+}
+else
+{
+    $tempfile = [System.IO.Path]::GetTempFileName()
+    $AppLockerEventsCsvFileFullPath = $AppLockerEventsCsvFile = $tempfile
+    $dataSourceName = "(Get-AppLockerEvents.ps1 output)"
+    & $rootDir\Get-AppLockerEvents.ps1 | Out-File $tempfile -Encoding unicode
+}
+
 
 # String constant
 $sFiltered = "FILTERED"
@@ -72,19 +89,19 @@ if (CreateExcelApplication)
     # Lines of text for the summary page
     $tabname = "Summary"
     Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $text = @()
+    [System.Collections.ArrayList]$text = @()
     $dtsort = ($dataFiltered.EventTime | Sort-Object); 
-    $text += "Summary information"
-    $text += ""
-    $text += "Data source:`t" + [System.IO.Path]::GetFileName($AppLockerEventsCsvFile)
-    $text += "First event:`t" + ([datetime]($dtsort[0])).ToString()
-    $text += "Last event:`t" + ([datetime]($dtsort[$dtsort.Length - 1])).ToString()
-    $text += "Number of events:`t" + $dataFiltered.Count.ToString()
-    $text += "Number of signed-file events:`t" + $eventsSigned.Count.ToString()
-    $text += "Number of unsigned-file events:`t" + $eventsUnsigned.Count.ToString()
+    $text.Add( "Summary information" ) | Out-Null
+    $text.Add( "" ) | Out-Null
+    $text.Add( "Data source:`t" + $dataSourceName ) | Out-Null
+    $text.Add( "First event:`t" + ([datetime]($dtsort[0])).ToString() ) | Out-Null
+    $text.Add( "Last event:`t" + ([datetime]($dtsort[$dtsort.Length - 1])).ToString() ) | Out-Null
+    $text.Add( "Number of events:`t" + $dataFiltered.Count.ToString() ) | Out-Null
+    $text.Add( "Number of signed-file events:`t" + $eventsSigned.Count.ToString() ) | Out-Null
+    $text.Add( "Number of unsigned-file events:`t" + $eventsUnsigned.Count.ToString() ) | Out-Null
     # Make sure the result of the pipe is an array, even if only one item.
     # Could also do this as ($dataUnfiltered | Select-Object MachineName -Unique).Count
-    $text += "Number of machines reporting events:`t" + ( @() + ($dataUnfiltered.MachineName | Group-Object)).Count.ToString()
+    $text.Add( "Number of machines reporting events:`t" + ( @($dataUnfiltered.MachineName | Group-Object)).Count.ToString() ) | Out-Null
     AddWorksheetFromText -text $text -tabname $tabname
 
     # Events per machine:
@@ -160,6 +177,11 @@ if (CreateExcelApplication)
     }
 
     ReleaseExcelApplication
+}
+
+if ($tempfile.Length -gt 0)
+{
+    Remove-Item $tempfile
 }
 
 $OutputEncoding = $OutputEncodingPrevious
