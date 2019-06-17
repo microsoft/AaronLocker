@@ -166,6 +166,14 @@ ProductName   = "MICROSOFT® VISUAL STUDIO® 2015";
 BinaryName = "VCRUNTIME140.DLL";
 }
 
+@{
+label = "MFC runtime DLL";
+RuleCollection = "Dll";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "MICROSOFT® VISUAL STUDIO® 2015";
+BinaryName = "MFC140U.DLL";
+}
+
 ###########################################################################
 # Visual Studio 2017
 ###########################################################################

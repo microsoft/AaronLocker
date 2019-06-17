@@ -125,8 +125,8 @@ else
 
 
 # Create CSV headers
-$csv = @()
-$csv += "Compare" + $tab + "Rule" + $tab + "Reference ($refname)" + $tab + "Comparison ($compname)" + $tab + "Reference info" + $tab + "Comparison info"
+[System.Collections.ArrayList]$csv = @()
+$csv.Add( "Compare" + $tab + "Rule" + $tab + "Reference ($refname)" + $tab + "Comparison ($compname)" + $tab + "Reference info" + $tab + "Comparison info" ) | Out-Null
 
 
 function GetNodeKeyAndValue( $fType, $oNode, [ref] $oKey, [ref] $oValue )
@@ -156,8 +156,14 @@ function GetNodeKeyAndValue( $fType, $oNode, [ref] $oKey, [ref] $oValue )
         $ruletype = "Path"
         $ruleInfo = $oNode.Conditions.FilePathCondition.Path
         # Exceptions in canonical order.
-        #TODO: also report any hash rules if found within path rule exceptions
-        $exceptions = (($oNode.Exceptions.FilePathCondition.Path + $oNode.Exceptions.FilePublisherCondition.BinaryName) | Sort-Object) -join $linebreakSeq
+        $exceptions = 
+            (
+                (
+                @($oNode.Exceptions.FilePathCondition.Path) + 
+                @($oNode.Exceptions.FilePublisherCondition.BinaryName) +
+                @($oNode.Exceptions.FileHashCondition.FileHash.SourceFileName)
+                ) | Sort-Object
+            ) -join $linebreakSeq
         $oKey.Value = $fType + $keySep + $ruletype + $keySep + $action + $keySep + $userOrGroup + $keySep + $ruleInfo
         $oValue.Value.ruleDetail = $exceptions
     }
@@ -334,16 +340,18 @@ function ShowKeyValCompare($key, $val)
 
 # Output everything in order
 
-$csv += (
+$csv.AddRange( @(
     $collections.Keys | Sort-Object | foreach {
         ShowKeyValCompare $_ $collections[$_]
     }
     )
-$csv += (
+)
+$csv.AddRange( @(
     $rules.Keys | Sort-Object | foreach {
         ShowKeyValCompare $_ $rules[$_]
     }
     )
+)
 
 if ($Excel)
 {

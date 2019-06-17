@@ -139,28 +139,28 @@ $x.AppLockerPolicy.RuleCollection | ForEach-Object {
             if ($null -ne $childNode.Exceptions)
             {
                 # Output exceptions with a designated separator character sequence that can be replaced with line feeds in Excel
-                $arrExceptions = @()
+                [System.Collections.ArrayList]$arrExceptions = @()
                 if ($null -ne $childNode.Exceptions.FilePathCondition)
                 {
-                    $arrExceptions += "[----- Path exceptions -----]"
-                    $arrExceptions += ($childNode.Exceptions.FilePathCondition.Path | Sort-Object)
+                    $arrExceptions.Add( "[----- Path exceptions -----]" ) | Out-Null
+                    $arrExceptions.AddRange( @($childNode.Exceptions.FilePathCondition.Path | Sort-Object) )
                 }
                 if ($null -ne $childNode.Exceptions.FilePublisherCondition)
                 {
-                    $arrExceptions += "[----- Publisher exceptions -----]"
-                    $arrExceptions += ($childNode.Exceptions.FilePublisherCondition | 
+                    $arrExceptions.Add( "[----- Publisher exceptions -----]" ) | Out-Null
+                    $arrExceptions.AddRange( @($childNode.Exceptions.FilePublisherCondition | 
                         ForEach-Object {
                             $s = $_.BinaryName + ": " + $_.PublisherName + "; " + $_.ProductName
                             $bvrLow = $_.BinaryVersionRange.LowSection
                             $bvrHigh = $_.BinaryVersionRange.HighSection
                             if ($bvrLow -ne "*" -or $bvrHigh -ne "*") { $s += "; ver " + $bvrLow + " to " + $bvrHigh }
                             $s
-                        } | Sort-Object)
+                        } | Sort-Object) )
                 }
                 if ($null -ne $childNode.Exceptions.FileHashCondition)
                 {
-                    $arrExceptions += "[----- Hash exceptions -----]"
-                    $arrExceptions += ($childNode.Exceptions.FileHashCondition.FileHash | ForEach-Object { $_.SourceFileName + "; length = " + $_.SourceFileLength } | Sort-Object)
+                    $arrExceptions.Add( "[----- Hash exceptions -----]" ) | Out-Null
+                    $arrExceptions.AddRange( @($childNode.Exceptions.FileHashCondition.FileHash | ForEach-Object { $_.SourceFileName + "; length = " + $_.SourceFileLength } | Sort-Object) )
                 }
                 $exceptions = $arrExceptions -join $linebreakSeq
             }

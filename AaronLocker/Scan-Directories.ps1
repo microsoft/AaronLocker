@@ -263,7 +263,6 @@ if ($SearchProgramData)
 if ($SearchOneUserProfile)
 {
     #Assume all unsafe paths
-    #TODO: Always ignore .js files in browser-cache temp directories?
     $dirsToInspect.Add($env:USERPROFILE, $UnsafeDir)
 }
 
@@ -272,7 +271,6 @@ if ($SearchAllUserProfiles)
     #Assume all unsafe paths
     # No special folder or environment variable available. Get user-profiles' root directory from the parent directory of the "all users" profile directory
     $UsersRoot = [System.IO.Path]::GetDirectoryName($env:PUBLIC)
-    #TODO: Always ignore .js files in browser-cache temp directories?
     # Skip app-compat juntions  (most disallow FILE_LIST_DIRECTORY)
     # Skip symlinks -- "All Users" is a symlinkd for \ProgramData but unlike most app-compat junctions it can be listed/traversed.
     # This code prevents that.
@@ -291,18 +289,18 @@ if ($DirsToSearch)
     $DirsToSearch | foreach { $dirsToInspect.Add($_, $UnknownDir) }
 }
 
-$csv = @()
+[System.Collections.ArrayList]$csv = @()
 
 # Output column headers
 if ($DirectoryNamesOnly)
 {
-    $csv +=
+    $csv.Add(
         "IsSafeDir" + "`t" + 
-        "Parent directory"
+        "Parent directory") | Out-Null
 }
 else
 {
-    $csv +=
+    $csv.Add(
         "IsSafeDir" + "`t" + 
         "File type" + "`t" + 
         "File extension" + "`t" +
@@ -317,7 +315,7 @@ else
         "CreationTime" + "`t" +
         "LastAccessTime" + "`t" +
         "LastWriteTime" + "`t" +
-        "File size"
+        "File size" ) | Out-Null
 }
 
 
@@ -461,8 +459,8 @@ if (Test-Path -Path $rootDir\AccessChk.exe)
 }
 
 # Exclude known admins from analysis
-$knownAdmins = @()
-$knownAdmins += & $ps1_KnownAdmins
+[System.Collections.ArrayList]$knownAdmins = @()
+$knownAdmins.AddRange( @(& $ps1_KnownAdmins) )
 
 # Capture into hash tables, separate file name, type, and parent path
 $dirsToInspect.Keys | foreach {
@@ -493,7 +491,7 @@ $dirsToInspect.Keys | foreach {
     }
 
     Write-Host "About to inspect $dirToInspect..." -ForegroundColor Cyan
-    $csv += InspectDirectories $dirToInspect $safety $writableDirs
+    $csv.AddRange( @(InspectDirectories $dirToInspect $safety $writableDirs) )
 }
 
 # Restore original Path if it was altered for AccessChk.exe
