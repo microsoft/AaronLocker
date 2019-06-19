@@ -229,6 +229,27 @@ param(
     $Objects
 )
 
+# --------------------------------------------------------------------------------
+# Only supported PowerShell version at this time: 5.1
+# PS Core v6.x doesn't include AppLocker cmdlets; string .Split() has new overloads that need to be dealt with.
+# (At some point, may also need to check $PSVersionTable.PSEdition)
+$psv = $PSVersionTable.PSVersion
+if ($psv.Major -ne 5 -or $psv.Minor -ne 1)
+{
+    $errMsg = "This script requires PowerShell v5.1.`nCurrent version = " + $PSVersionTable.PSVersion.ToString()
+    Write-Error $errMsg
+    return
+}
+
+# Make sure this script is running in FullLanguage mode
+if ($ExecutionContext.SessionState.LanguageMode -ne [System.Management.Automation.PSLanguageMode]::FullLanguage)
+{
+    $errMsg = "This script must run in FullLanguage mode, but is running in " + $ExecutionContext.SessionState.LanguageMode.ToString()
+    Write-Error $errMsg
+    return
+}
+
+# --------------------------------------------------------------------------------
 $rootDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
 # Get configuration settings and global functions from .\Support\Config.ps1)
 # Dot-source the config file.
@@ -551,7 +572,14 @@ $oLines = @(
                 $oHash = $Properties[5]
                 if ($oHash -is [System.String])
                 {
-                    $hash = $oHash
+                    if ($oHash.StartsWith("0x")) 
+                    { 
+                        $hash = $oHash 
+                    }
+                    else 
+                    { 
+                        $hash = "0x" + $oHash 
+                    }
                 }
                 else
                 {

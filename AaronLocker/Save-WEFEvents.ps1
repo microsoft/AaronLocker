@@ -12,6 +12,9 @@ Number of days ago from which to start retrieving data. E.g., "-daysBack 5" pull
 .PARAMETER label
 Name to insert into the filename (can be useful to distinguish sources).
 
+.PARAMETER EventLogName
+WEC log name to use instead of ForwardedEvents.
+
 #>
 
 param(
@@ -25,7 +28,12 @@ param(
 
     [parameter(Mandatory=$false)]
     [string]
-    $label = ""
+    $label = "",
+
+    [parameter(Mandatory=$false)]
+    [string]
+    $EventLogName = "ForwardedEvents"
+
 )
 
 if (!$rootdir) { $rootdir = "." }
@@ -44,11 +52,11 @@ $OutputEncoding = [System.Text.ASCIIEncoding]::Unicode
 
 if ($daysBack -gt 0)
 {
-    $csvFull = .\Get-AppLockerEvents.ps1 -ForwardedEvents -NoAutoNGEN -FromDateTime ([datetime]::Now.AddDays(-$daysBack))
+    $csvFull = .\Get-AppLockerEvents.ps1 -EventLogNames @($EventLogName) -NoAutoNGEN -FromDateTime ([datetime]::Now.AddDays(-$daysBack))
 }
 else
 {
-    $csvFull = .\Get-AppLockerEvents.ps1 -ForwardedEvents -NoAutoNGEN
+    $csvFull = .\Get-AppLockerEvents.ps1 -EventLogNames @($EventLogName) -NoAutoNGEN
 }
 
 $csvFull | Out-File -Encoding unicode $filenameFull
