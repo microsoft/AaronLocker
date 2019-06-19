@@ -363,12 +363,15 @@ $AutoNGENPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Local\\Packages\\.*
 # Filter out those test files by default.
 # Current implementation: match partial path of file in temp directory with form "XXXXXXXX.XXX.PS*" or "__PSScriptPolicyTest_XXXXXXXX.XXX.PS*"
 $PsPolicyTestPattern = "\\APPDATA\\LOCAL\\TEMP\\(__PSScriptPolicyTest_)?[A-Z0-9]{8}\.[A-Z0-9]{3}\.PS"
+$PsPolicyTestFileHash1 = "0x6B86B273FF34FCE19D6B804EFF5A3F5747ADA4EAA22F1D49C01E52DDB7875B4B"
+$PsPolicyTestFileHash2 = "0x96AD1146EB96877EAB5942AE0736B82D8B5E2039A80D3D6932665C1A4C87DCF7"
 <# Implementation notes: attempts to match against a fixed hash value instead of a somewhat complex pattern match.
     PS script policy test file used to be a one-byte file containing "1", with SHA256 hash = 0x6B86B273FF34FCE19D6B804EFF5A3F5747ADA4EAA22F1D49C01E52DDB7875B4B
     That ended up colliding with some other Microsoft-catalog-signed file on some machines. Signature check came up positive and test file was allowed, so
     PS consoles ran in FullLanguage mode instead of ConstrainedLanguage. PS responded by randomizing the files' content, which avoided the collision but made a hash
     comparison impossible. Current version now contains fixed content with a SHA256 hash = 0x96AD1146EB96877EAB5942AE0736B82D8B5E2039A80D3D6932665C1A4C87DCF7.
     Don't know how widely-deployed this is, though. For now, sticking with filepath pattern match.
+    Note: as of 17 June 2019, still seeing both hashes in different environments.
 #>
 
 # Filepath pattern that can be replaced by %LOCALAPPDATA%
@@ -493,21 +496,6 @@ $filteredOut = 0
 $oLines = @(
     $ev | foreach {
 
-        <# 
-            For all Microsoft-Windows-AppLocker events here, indexes into Properties array:
-                1: PolicyName (EXE, DLL, MSI, SCRIPT, APPX)
-                7: TargetUser --> System.Security.Principal.SecurityIdentifier, with Value property that is [string] User SID
-                8: TargetProcessId
-            For Appx:
-                10: Package
-                12: Fqbn
-            For all others:
-                10: FilePath
-                11: FileHashLength
-                12: FileHash
-                14: Fqbn
-        #>
-
         # Whether to filter out this particular event from the output
         $filterOut = $false
 
@@ -517,29 +505,80 @@ $oLines = @(
         $isAppxEvent = $_.Id -in $AppxEventIDs
         # If it's neither a WEC bookmark nor an APPX event, it's expected to be EXE, DLL, MSI, or SCRIPT
 
-        # Don't access or manipulate any properties unless and until they're needed
+        $machineName = $_.MachineName
+        $origPath = $null
 
         if ($isWecBkmark)
         {
             # Bookmark event; filter out this event (but capture machine info)
             $filterOut = $true
         }
-        elseif (!$isAppxEvent)
+        else
         {
-            # 1: PolicyName (here expected to be EXE, DLL, MSI, or SCRIPT)
-            $filetype = $_.Properties[1].Value
-            # 10: FilePath
-            $origPath = $_.Properties[10].Value
-            # Filter out events that match patterns; do the match only if relevant for the file type
-            if ($filetype -eq "SCRIPT" -and !$NoPSFilter)
+            # Retrieve all properties at once; don't process them unless/until needed
+            if (!$isAppxEvent)
             {
-                # PowerShell policy-test file (filtered out by default)
-                $filterOut = ($origPath -match $PsPolicyTestPattern)
+                $SelectorStrings = [string[]]@(
+                    'Event/UserData/RuleAndFileData/PolicyName',      # 0
+                    'Event/UserData/RuleAndFileData/TargetUser',      # 1
+                    'Event/UserData/RuleAndFileData/TargetProcessId', # 2
+                    'Event/UserData/RuleAndFileData/Fqbn',            # 3
+                    'Event/UserData/RuleAndFileData/FilePath',        # 4 <-- for not APPX
+                    'Event/UserData/RuleAndFileData/FileHash'         # 5 <-- for not APPX
+                )
             }
-            elseif ($filetype -in ("EXE", "DLL") -and $NoAutoNGEN)
+            else
             {
-                # AutoNGEN (not filtered out by default)
-                $filterOut = ($origPath -match $AutoNGENPattern)
+                $SelectorStrings = [string[]]@(
+                    'Event/UserData/RuleAndFileData/PolicyName',      # 0
+                    'Event/UserData/RuleAndFileData/TargetUser',      # 1
+                    'Event/UserData/RuleAndFileData/TargetProcessId', # 2
+                    'Event/UserData/RuleAndFileData/Fqbn',            # 3
+                    'Event/UserData/RuleAndFileData/Package'          # 4 <-- for APPX
+                )
+            }
+
+            $PropertySelector = [System.Diagnostics.Eventing.Reader.EventLogPropertySelector]::new($SelectorStrings)
+
+            $Properties = $_.GetPropertyValues($PropertySelector)
+
+            # PolicyName (EXE, DLL, MSI, SCRIPT, APPX)
+            $filetype = $Properties[0]
+
+            if (!$isAppxEvent)
+            {
+                $origPath = $Properties[4]
+                $oHash = $Properties[5]
+                if ($oHash -is [System.String])
+                {
+                    $hash = $oHash
+                }
+                else
+                {
+                    if ($oHash.Length -gt 0)
+                    {
+                        $hash = "0x" + [System.BitConverter]::ToString( $oHash ).Replace('-', '')
+                    }
+                    else
+                    {
+                        $hash = "(not reported)"
+                    }
+                }
+
+                # Filter out events that match patterns; do the match only if relevant for the file type
+                if ($filetype -eq "SCRIPT" -and !$NoPSFilter)
+                {
+                    # PowerShell policy-test file (filtered out by default); 
+                    # assume that string match is faster than regular expression match so try those first
+                    if     ($hash -eq $PsPolicyTestFileHash1) { $filterOut = $true }
+                    elseif ($hash -eq $PsPolicyTestFileHash2) { $filterOut = $true }
+                    elseif ($origPath -match $PsPolicyTestPattern) { $filterOut = $true }
+                }
+                elseif ($filetype -in ("EXE", "DLL") -and $NoAutoNGEN)
+                {
+                    # AutoNGEN (not filtered out by default)
+                    $filterOut = ($origPath -match $AutoNGENPattern)
+                }
             }
         }
 
@@ -549,7 +588,6 @@ $oLines = @(
         if (!$NoFilteredMachines)
         {
             # Capture some information about observed machines, in case all events related to the computer are filtered.
-            $machineName = $_.MachineName
             if (!$AllMachineNames.ContainsKey($machineName))
             {
                 # All observed machines
@@ -565,8 +603,7 @@ $oLines = @(
         # If not filtered out, build out the event data
         if (!$filterOut)
         {
-            # Computer name
-            $machineName = $_.MachineName
+            # Computer name already in $machineName
             # high-granularity date/time where alpha sort = chronological sort; granularity = ten millionths of a second
             $timeCreated = $_.TimeCreated.ToString("yyyy-MM-ddTHH:mm:ss.fffffff") 
             # Date/time format that Excel recognizes as date/time
@@ -575,7 +612,7 @@ $oLines = @(
 
             # Manual text conversion in case LevelDisplayName is not populated
             if(![string]::IsNullOrEmpty($_.LevelDisplayName)){
-                $eventType = $_.LevelDisplayName            # Event type (Information, Warning, Error)
+                $eventType = $_.LevelDisplayName  # Event type (Information, Warning, Error)
             }
             else{
                 $eventType = switch($_.Level)
@@ -589,43 +626,32 @@ $oLines = @(
                 }
             }
 
-            # 7: TargetUser --> System.Security.Principal.SecurityIdentifier, with Value property that is [string] User SID
-            $userSid = $_.Properties[7].Value.Value
+            $userSid = $Properties[1].ToString()
             $username = SidToNameLookup -sid $userSid
-            # 8: TargetProcessId
-            $sPID = $_.Properties[8].Value
+            $sPID = $Properties[2].ToString()
+            $pubInfo = $Properties[3].Split("\") # Publisher info, separated with backslashes
 
             if ($isAppxEvent)
             {
-                # 1: PolicyName (here expected to be APPX)
-                $filetype = $_.Properties[1].Value
-                # 10: Package
-                $origPath = $_.Properties[10].Value
+                $origPath = $Properties[4]
                 $filename = $genpath = $gendir = $origPath
                 $fileext = [string]::Empty
                 $hash = "N/A"
-                $pubInfo = $_.Properties[12].Value.Split("\") # Publisher info, separated with backslashes
             }
             else
             {
-                # Already got $filetype and $origPath earlier
+                # Already got $origPath earlier
                 $filename = [System.IO.Path]::GetFileName($origPath)
                 $fileext = [System.IO.Path]::GetExtension($origPath)
                 # Generic path replaces user-specific paths with more generic variable syntax.
                 # Userprofile has to be performed after more specific appdata replacements.
                 $genpath = (($origPath -replace $LocalAppDataPattern, "%LOCALAPPDATA%\") -replace $RoamingAppDataPattern, "%APPDATA%\") -replace $UserProfilePattern, "%USERPROFILE%\"
+    $gendir = $null
                 $gendir = [System.IO.Path]::GetDirectoryName($genpath)
-
-                if ($_.Properties[11].Value -ne 0)
-                {
-                    $hash = "0x" + [System.BitConverter]::ToString( $_.Properties[12].Value ).Replace('-', '')
-                }
-                else
-                {
-                    $hash = [string]::Empty
-                }
-
-                $pubInfo = $_.Properties[14].Value.Split("\") # Publisher info, separated with backslashes
+    if ($null -eq $gendir)
+    {
+        Write-Host ($_ | fl *) -ForegroundColor Magenta
+    }
             }
 
             # Break up Fqdn publisher info
@@ -724,7 +750,7 @@ else
 }
 
 <#
-    Template for "EXE and DLL" and "MSI and Script" 8002, 8003, 8004, 8005, 8006, and 8007 events:
+    One template for "EXE and DLL" and "MSI and Script" 8002, 8003, 8004, 8005, 8006, and 8007 events:
     <template xmlns="http://schemas.microsoft.com/win/2004/08/events">
       <data name="PolicyNameLength" inType="win:UInt16" outType="xs:unsignedShort"/>
       <data name="PolicyNameBuffer" inType="win:UnicodeString" outType="xs:string" length="PolicyNameLength"/>
@@ -744,7 +770,7 @@ else
       <data name="TargetLogonId" inType="win:HexInt64" outType="win:HexInt64"/>
     </template>
 
-    Template for "Packaged app-Execution" 8020, 8021, and 8022 events:
+    One template for "Packaged app-Execution" 8020, 8021, and 8022 events:
     <template xmlns="http://schemas.microsoft.com/win/2004/08/events">
       <data name="PolicyNameLength" inType="win:UInt16" outType="xs:unsignedShort"/>
       <data name="PolicyNameBuffer" inType="win:UnicodeString" outType="xs:string" length="PolicyNameLength"/>
