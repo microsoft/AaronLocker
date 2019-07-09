@@ -194,6 +194,14 @@ ProductName   = "MICROSOFT® VISUAL STUDIO® 2017";
 BinaryName = "VCRUNTIME140.DLL";
 }
 
+@{
+label = "MFC runtime DLL";
+RuleCollection = "Dll";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "MICROSOFT® VISUAL STUDIO® 2017";
+BinaryName = "MFC140.DLL";
+}
+
 ###########################################################################
 # Visual Studio 10
 ###########################################################################

@@ -84,6 +84,15 @@ RuleCollection = "Script";
 PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
 }
 
+@{
+# During Windows upgrade, setup loads %OSDRIVE%\$WINDOWS.~BT\SOURCES\GENERALTEL.DLL
+label = "Allow execution of %OSDRIVE%\$WINDOWS.~BT\SOURCES\GENERALTEL.DLL during Windows upgrade";
+RuleCollection = "Dll";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "MICROSOFT® WINDOWS® OPERATING SYSTEM";
+BinaryName = "GENERALTEL.DLL";
+}
+
 # Uncomment this block if Google Chrome is installed to ProgramFiles.
 # Google Chrome runs some code in the user profile even when Chrome is installed to Program Files.
 # This creates publisher rules that allow those components to run.
