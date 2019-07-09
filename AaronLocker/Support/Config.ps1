@@ -35,6 +35,8 @@ $fname_TrustedSigners           = "TrustedSigners.ps1"
 $ps1_TrustedSigners             = [System.IO.Path]::Combine($customizationInputsDir, $fname_TrustedSigners)
 $ps1_HashRuleData               = [System.IO.Path]::Combine($customizationInputsDir, "HashRuleData.ps1")
 $ps1_KnownAdmins                = [System.IO.Path]::Combine($customizationInputsDir, "KnownAdmins.ps1")
+$ps1_CreatePoliciesAppLocker    = [System.IO.Path]::Combine($rootDir, "Create-Policies-AppLocker.ps1")
+$ps1_CreatePoliciesWDAC         = [System.IO.Path]::Combine($rootDir, "Create-Policies-WDAC.ps1")
 
 # Path to results from scanning files listed in GetExeFilesToBlacklist
 $ExeBlacklistData = [System.IO.Path]::Combine($scanResultsDir, "ExeBlacklistData.txt")
@@ -69,10 +71,13 @@ $strRuleDocTimestamp = $dtNow.ToString("yyyy-MM-dd HH:mm")
 $strFnameTimestamp = $dtNow.ToString("yyyyMMdd-HHmm")
 $strTimestampForHashRule = $dtNow.ToString("yyyyMMddHHmmss")
 $rulesFileBase = "AppLockerRules-"
+$WDACrulesFileBase = "WDACRules-"
 $rulesFileAuditSuffix = "-Audit.xml"
 $rulesFileEnforceSuffix = "-Enforce.xml"
 $rulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileAuditSuffix)
 $rulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileEnforceSuffix)
+$WDACrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + $rulesFileAuditSuffix)
+$WDACrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + $rulesFileEnforceSuffix)
 # Get latest audit and enforce policy files, or $null if none found.
 function RulesFileAuditLatest()
 {
@@ -81,6 +86,14 @@ function RulesFileAuditLatest()
 function RulesFileEnforceLatest()
 {
     Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $rulesFileBase + "*" + $rulesFileEnforceSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACRulesFileAuditLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileAuditSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACRulesFileEnforceLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileEnforceSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
 }
 
 
