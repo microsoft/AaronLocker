@@ -3,15 +3,18 @@
 Produces a multi-tab Excel workbook containing summary and details of AppLocker events to support advanced analysis.
 
 .DESCRIPTION
-Converts output from the Get-AppLockerEvents.ps1 or Save-WEFEvents.ps1 scripts to a multi-tab Excel workbook supporting numerous views of the data, including:
+Converts output from the Get-AppLockerEvents.ps1 or Save-WEFEvents.ps1 scripts to a multi-tab Excel workbook supporting numerous views of the data, many including graphs.
+Worksheets include:
 * Summary tab showing date/time ranges of the reported events and other summary information.
-* List of machines reporting events, and the number of events per machine.
-* List of publishers of signed files appearing in events, and the number of events per publisher.
+* Numbers of distinct users running files from each high-level location such as user profile, hot/removable, non-default root directories, etc.
+* Numbers of distinct users running files from each observed publisher.
+* Numbers of distinct users running each observed file (by GenericPath).
 * All combinations of publishers/products for signed files in events.
 * All combinations of publishers/products and generic file paths ("generic" meaning that user-specific paths are replaced with %LOCALAPPDATA%, %USERPROFILE%, etc., as appropriate).
 * Paths of unsigned files, with filename alone, file type, and file hash.
-* Files grouped by user.
+* Files and publishers grouped by user.
 * Full details from Get-AppLockerEvents.ps1.
+With the -RawEventCounts switch, the workbook adds sheets showing raw event counts for each machine, publisher, and user.
 These separate tabs enable quick determination of the files running afoul of AppLocker rules and help quickly determine whether/how to adjust the rules.
 
 .PARAMETER AppLockerEventsCsvFile
@@ -21,6 +24,9 @@ If not specified, this script invokes Get-AppLockerEvents.ps1 on the local compu
 .PARAMETER SaveWorkbook
 If AppLockerEventsCsvFile is specified and this option is set, the script saves the workbook to the same directory
 as the input file and with the same file name but with the default Excel file extension.
+
+.PARAMETER RawEventCounts
+If the -RawEventCounts switch is specified, workbook includes additional worksheets focused on raw event counts per machine, per user, and per publisher.
 #>
 
 [CmdletBinding(DefaultParameterSetName="GenerateTempCsv")]
@@ -32,7 +38,10 @@ param(
 
     [parameter(ParameterSetName="NamedCsvFile")]
     [switch]
-    $SaveWorkbook
+    $SaveWorkbook,
+
+    [switch]
+    $RawEventCounts
 )
 
 $rootDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
@@ -70,103 +79,171 @@ else
 }
 
 
-# String constant
-$sFiltered = "FILTERED"
+Write-Host "Reading data from $AppLockerEventsCsvFile" -ForegroundColor Cyan
+$csvFull = @(Get-Content $AppLockerEventsCsvFile)
+$dataUnfiltered = @($csvFull | ConvertFrom-Csv -Delimiter "`t")
+$dataFiltered   = @($dataUnfiltered | Where-Object { $_.EventType -ne $sFiltered })
+$eventsSigned   = @($dataFiltered | Where-Object { $_.PublisherName -ne $sUnsigned -and $_.PublisherName -ne $sNoPublisher })
+$eventsUnsigned = @($dataFiltered | Where-Object { $_.PublisherName -eq $sUnsigned -or  $_.PublisherName -eq $sNoPublisher })
+
+if ($dataUnfiltered.Length -eq 0)
+{
+    Write-Warning "No data. Exiting."
+    return
+}
+
+$nEvents = $dataFiltered.Length
+$nSignedEvents = $eventsSigned.Length
+$nUnsignedEvents = $eventsUnsigned.Length
 
 if (CreateExcelApplication)
 {
-    Write-Host "Reading data from $AppLockerEventsCsvFile" -ForegroundColor Cyan
-    $csvFull = @(Get-Content $AppLockerEventsCsvFile)
-    #Write-Host "Converting to CSV" -ForegroundColor Yellow
-    $dataUnfiltered = @($csvFull | ConvertFrom-Csv -Delimiter "`t")
-    #Write-Host "Getting filtered events" -ForegroundColor Yellow
-    $dataFiltered = @($dataUnfiltered | Where-Object { $_.EventType -ne $sFiltered })
-    #Write-Host "Getting signed events" -ForegroundColor Yellow
-    $eventsSigned   = @($dataFiltered | Where-Object { $_.PublisherName -ne "-" })
-    #Write-Host "Getting unsigned events" -ForegroundColor Yellow
-    $eventsUnsigned = @($dataFiltered | Where-Object { $_.PublisherName -eq "-" })
+    # Array to set sort order descending on Count and then ascending on Name
+    $CountDescNameAsc = @( @{ Expression = "Count"; Descending = $true }, @{ Expression = "Name"; Descending = $false} )
 
     # Lines of text for the summary page
     $tabname = "Summary"
     Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
     [System.Collections.ArrayList]$text = @()
-    $dtsort = ($dataFiltered.EventTime | Sort-Object); 
     $text.Add( "Summary information" ) | Out-Null
     $text.Add( "" ) | Out-Null
     $text.Add( "Data source:`t" + $dataSourceName ) | Out-Null
-    $text.Add( "First event:`t" + ([datetime]($dtsort[0])).ToString() ) | Out-Null
-    $text.Add( "Last event:`t" + ([datetime]($dtsort[$dtsort.Length - 1])).ToString() ) | Out-Null
-    $text.Add( "Number of events:`t" + $dataFiltered.Count.ToString() ) | Out-Null
-    $text.Add( "Number of signed-file events:`t" + $eventsSigned.Count.ToString() ) | Out-Null
-    $text.Add( "Number of unsigned-file events:`t" + $eventsUnsigned.Count.ToString() ) | Out-Null
+    if ($nEvents -gt 0)
+    {
+        $dtsort = ($dataFiltered.EventTime | Sort-Object); 
+        $dtFirst = ([datetime]($dtsort[0])).ToString()
+        $dtLast =  ([datetime]($dtsort[$dtsort.Length - 1])).ToString()
+    }
+    else
+    {
+        $dtFirst = $dtLast = "N/A"
+    }
+    $text.Add( "First event:`t" + $dtFirst ) | Out-Null
+    $text.Add( "Last event:`t" + $dtLast ) | Out-Null
+    $text.Add( "" ) | Out-Null
+    $text.Add( "Number of events:`t" + $nEvents.ToString() ) | Out-Null
+    $text.Add( "Number of signed-file events:`t" + $nSignedEvents.ToString() ) | Out-Null
+    $text.Add( "Number of unsigned-file events:`t" + $nUnsignedEvents.ToString() ) | Out-Null
     # Make sure the result of the pipe is an array, even if only one item.
-    # Could also do this as ($dataUnfiltered | Select-Object MachineName -Unique).Count
     $text.Add( "Number of machines reporting events:`t" + ( @($dataUnfiltered.MachineName | Group-Object)).Count.ToString() ) | Out-Null
+    $text.Add( "Number of users reporting events:`t" + ( @($dataFiltered.UserName | Group-Object)).Count.ToString() ) | Out-Null
     AddWorksheetFromText -text $text -tabname $tabname
 
-    # Events per machine:
-    $tabname = "Machines and event counts"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($dataFiltered.MachineName | Group-Object | Select-Object Name, Count | Sort-Object Name | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    $csv += ($dataUnfiltered | Where-Object { $_.EventType -eq $sFiltered } | ForEach-Object { $_.MachineName + "`t0" })
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname -CrLfEncoded ""
+    if ($nEvents -gt 0)
+    {
+        # Users per location:
+        $tabname = "# Users per Location"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($dataFiltered | Select-Object Location, UserName -Unique | Group-Object Location | Select-Object Name, Count | Sort-Object -Property $CountDescNameAsc | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        # Change the headers
+        $csv[0] = "Location" + "`t" + "# of distinct users"
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname -CrLfEncoded "" -AddChart
+    }
 
-    # Counts of each publisher:
-    $tabname = "Publishers and event counts"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($dataFiltered.PublisherName | Group-Object | Select-Object Name, Count | Sort-Object Name | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    if ($nEvents -gt 0)
+    {
+        # Users per publisher:
+        $tabname = "# Users per Publisher"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($dataFiltered | Select-Object PublisherName, UserName -Unique | Group-Object PublisherName | Select-Object Name, Count | Sort-Object -Property $CountDescNameAsc | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        # Change the headers
+        $csv[0] = "PublisherName" + "`t" + "# of distinct users"
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname -CrLfEncoded "" -AddChart
+    }
 
-    # Publisher/product combinations:
-    $tabname = "Publisher-product combinations"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($eventsSigned | Select-Object PublisherName, ProductName | Sort-Object PublisherName, ProductName -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    if ($nSignedEvents -gt 0)
+    {
+        # Publisher/product combinations:
+        $tabname = "Publisher-product combinations"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($eventsSigned | Select-Object PublisherName, ProductName | Sort-Object PublisherName, ProductName -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    }
 
-    # Publisher/product/file combinations:
-    $tabname = "Signed file info"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($eventsSigned | Select-Object PublisherName, ProductName, GenericPath, FileName, FileType | Sort-Object PublisherName, ProductName, GenericPath -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    if ($nEvents -gt 0)
+    {
+        # Users per file:
+        $tabname = "# Users per File"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($dataFiltered | Select-Object Location, GenericPath, UserName -Unique | Group-Object Location, GenericPath | Select-Object Name, Count | Sort-Object -Property $CountDescNameAsc | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        # Change the headers
+        $csv[0] = "Location, GenericPath" + "`t" + "# of distinct users"
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname -CrLfEncoded "" -AddChart
+    }
 
-    #   # Publisher/product/directory combinations:
-    #   $tabname = "Signed file info (dir only)"
-    #   Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    #   $csv = ($eventsSigned | Select-Object PublisherName, ProductName, GenericDir, FileType | Sort-Object PublisherName, ProductName, GenericDir -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    #   AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    if ($nSignedEvents -gt 0)
+    {
+        # Publisher/product/file combinations:
+        $tabname = "Signed file info"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($eventsSigned | Select-Object PublisherName, ProductName, Location, GenericPath, FileName, FileType | Sort-Object PublisherName, ProductName, Location, GenericPath -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    }
 
-    # Analysis of unsigned files:
-    $tabname = "Unsigned file info"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($eventsUnsigned | Select-Object GenericPath, FileName, FileType, Hash | Sort-Object GenericPath -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    if ($nUnsignedEvents -gt 0)
+    {
+        # Analysis of unsigned files:
+        $tabname = "Unsigned file info"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($eventsUnsigned | Select-Object Location, GenericPath, FileName, FileType, Hash | Sort-Object Location, GenericPath -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    }
 
-    #   # Analysis of unsigned files (dir only):
-    #   $tabname = "Dirs of unsigned files"
-    #   Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    #   $csv = ($eventsUnsigned | Select-Object GenericDir | Sort-Object GenericDir -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    #   AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    if ($nEvents -gt 0)
+    {
+        # Files by user
+        $tabname = "Files by User"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($dataFiltered | Select-Object UserName, Location, GenericPath, FileType, PublisherName, ProductName | Sort-Object UserName, Location, GenericPath -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    }
 
-    # Events per user:
-    $tabname = "Users and event counts"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($dataFiltered.UserName | Group-Object | Select-Object Name, Count | Sort-Object Name | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname -CrLfEncoded ""
-
-    # Per-user details
-    $tabname = "Files by user"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($dataFiltered | Select-Object UserName, GenericPath, PublisherName, ProductName | Sort-Object UserName, GenericPath, PublisherName, ProductName -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname
-
-    # Per-user details
-    $tabname = "Files by user (details)"
-    Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
-    $csv = ($dataFiltered | Select-Object UserName, MachineName, EventTimeXL, GenericPath, PublisherName, ProductName | Sort-Object UserName, MachineName, EventTimeXL, GenericPath, PublisherName, ProductName -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
-    AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    if ($nEvents -gt 0)
+    {
+        # Files by user (details)
+        $tabname = "Files by User (details)"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($dataFiltered | Select-Object UserName, MachineName, EventTimeXL, FileType, GenericPath, PublisherName, ProductName | Sort-Object UserName, MachineName, EventTimeXL, FileType, GenericPath -Unique | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname
+    }
 
     # All event data
     AddWorksheetFromCsvFile -filename $AppLockerEventsCsvFileFullPath -tabname "Full details"
+
+    if ($RawEventCounts)
+    {
+        # Events per machine:
+        $tabname = "# Events per Machine"
+        Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+        $csv = @($dataFiltered.MachineName | Group-Object | Select-Object Name, Count | Sort-Object -Property $CountDescNameAsc | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+        if ($csv.Length -eq 0) { $csv = @("header") } # No events - insert dummy header row, replaced in a moment
+        $csv += @($dataUnfiltered | Where-Object { $_.EventType -eq $sFiltered } | ForEach-Object { $_.MachineName + "`t0" })
+        # Change the headers
+        if ($csv.Length -gt 0 ) { $csv[0] = "MachineName" + "`t" + "Event count" }
+        AddWorksheetFromCsvData -csv $csv -tabname $tabname -CrLfEncoded "" -AddChart
+
+        if ($nEvents -gt 0)
+        {
+            # Counts of each publisher:
+            $tabname = "# Events per Publisher"
+            Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+            $csv = @($dataFiltered.PublisherName | Group-Object | Select-Object Name, Count | Sort-Object -Property $CountDescNameAsc | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+            # Change the headers
+            if ($csv.Length -gt 0 ) { $csv[0] = "PublisherName" + "`t" + "Events" }
+            AddWorksheetFromCsvData -csv $csv -tabname $tabname -AddChart
+        }
+
+        if ($nEvents -gt 0)
+        {
+            # Events per user:
+            $tabname = "# Events per User"
+            Write-Host "Gathering data for `"$tabname`"..." -ForegroundColor Cyan
+            $csv = @($dataFiltered.UserName | Group-Object | Select-Object Name, Count | Sort-Object -Property $CountDescNameAsc | ConvertTo-Csv -Delimiter "`t" -NoTypeInformation)
+            # Change the headers
+            $csv[0] = "UserName" + "`t" + "Events"
+            AddWorksheetFromCsvData -csv $csv -tabname $tabname -CrLfEncoded "" -AddChart
+        }
+    }
 
     SelectFirstWorksheet
 

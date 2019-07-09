@@ -16,8 +16,8 @@ Functions to create Excel spreadsheets/workbooks:
   SaveWorkbook([string]$filename)
   AddNewWorksheet([string]$tabname)
   AddWorksheetFromText([string[]]$text, [string]$tabname)
-  AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$CrLfEncoded)
-  AddWorksheetFromCsvData([string[]]$csv, [string]$tabname, [string]$CrLfEncoded)
+  AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$CrLfEncoded, [switch]$AddChart)
+  AddWorksheetFromCsvData([string[]]$csv, [string]$tabname, [string]$CrLfEncoded, [switch]$AddChart)
   CreateExcelFromCsvFile([string]$filename, [string]$tabname, [string]$CrLfEncoded, [string]$saveAsName)
 
 Function to determine whether a file is a Win32 EXE, a Win32 DLL, or neither
@@ -167,7 +167,7 @@ function AddWorksheetFromText([string[]]$text, [string]$tabname)
 }
 
 # Add a new named worksheet from CSV data in the specified file, optionally replacing encoded CrLf with CrLf.
-function AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$CrLfEncoded)
+function AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$CrLfEncoded, [switch]$AddChart)
 {
     Write-Host "Populating tab `"$tabname`"..." -ForegroundColor Cyan
 
@@ -199,25 +199,29 @@ function AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$C
     $global:ExcelAppInstance.ActiveWindow.SplitColumn = 0
     $global:ExcelAppInstance.ActiveWindow.SplitRow = 1
     $global:ExcelAppInstance.ActiveWindow.FreezePanes = $true
-    $global:ExcelAppInstance.ActiveWindow.Zoom = 80
+    #$global:ExcelAppInstance.ActiveWindow.Zoom = 80
 
     $dummy = $worksheet.Range("A2").Select()
 
     # Formatting: autosize column widths, then set maximum width (except on last column)
-    $maxWidth = 40
+    $maxWidth = 50
     $maxHeight = 120
 
     $dummy = $worksheet.Cells.EntireColumn.AutoFit()
-    $ix = 1
-    # Do this until the next to last column; don't set max width on the last column
-    while ( $worksheet.Cells(1, $ix + 1).Text.Length -gt 0)
+    # Don't set max width if 3 columns or fewer
+    if ($worksheet.UsedRange.Columns.Count -gt 3)
     {
-        $cells = $worksheet.Cells(1, $ix)
-        #Write-Host ($cells.Text + "; " + $cells.ColumnWidth)
-        if ($cells.ColumnWidth -gt $maxWidth) { $cells.ColumnWidth = $maxWidth }
-        $ix++
+        $ix = 1
+        # Do this until the next to last column; don't set max width on the last column
+        while ( $worksheet.Cells(1, $ix + 1).Text.Length -gt 0)
+        {
+            $cells = $worksheet.Cells(1, $ix)
+            #Write-Host ($cells.Text + "; " + $cells.ColumnWidth)
+            if ($cells.ColumnWidth -gt $maxWidth) { $cells.ColumnWidth = $maxWidth }
+            $ix++
+        }
     }
-    
+        
     # Formatting: autosize row heights, then set maximum height (if CrLf replacement on)
     $dummy = $worksheet.Cells.EntireRow.AutoFit()
     # If line breaks added, limit autofit row height to 
@@ -233,6 +237,63 @@ function AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$C
         }
     }
 
+    if ($AddChart)
+    {
+        # If lots of input data, limit number of entries in chart
+        $chartLimit = 20
+
+        $oShape = $worksheet.Shapes.AddChart2(216, 57)
+        # Have to cast from double to single to avoid runtime errors
+        $oShape.Left = [System.Single]($worksheet.Range("D2").Left)
+        $oShape.Top = [System.Single]($worksheet.Range("D2").Top)
+        $oShape.Visible = $true
+
+        $oChartObject = $worksheet.ChartObjects(1)
+        $oChart = $oChartObject.Chart
+        $rowCount = $worksheet.UsedRange.Rows.Count
+        $oChart.ChartTitle.Text = $tabname
+        if ($rowCount -le $chartLimit)
+        {
+            # Use whatever data is there
+            $oChart.SetSourceData($worksheet.UsedRange, 2) # 2 = xlColumns
+        }
+        else
+        {
+            # Build chart from top $chartLimit entries, then sum the rest into "Others"
+            $sSeries1 = [System.Text.StringBuilder]::new()
+            $sSeries2 = [System.Text.StringBuilder]::new()
+            2 .. ($chartLimit+1) | ForEach-Object {
+                if ($_ -gt 2) {
+                    [void]$sSeries1.Append(",")
+                    [void]$sSeries2.Append(",")
+                }
+                [void]$sSeries1.Append("`"" + $worksheet.Range('$A' + $_).Text + "`"")
+                [void]$sSeries2.Append($worksheet.Range('$B' + $_).Text)
+            }
+            [void]$sSeries1.Append(",`"Others`"")
+            [void]$sSeries2.Append("," + $global:ExcelAppInstance.WorksheetFunction.Sum($worksheet.Range('$B' + ($chartLimit+2) + ":B" + $rowCount)))
+            $sSeries =
+                "=SERIES(`"" + $worksheet.Range('$B1').Text + "`"," +
+                "{" + $sSeries1.ToString() + "},{" + $sSeries2.ToString() + "},1)"
+            #Write-Host $sSeries -ForegroundColor Green
+            $oChart.SeriesCollection(1).Formula = $sSeries
+            #$oChart.SetSourceData($worksheet.Range('$A$1:$B$' + ($chartLimit + 1).ToString()), 2) # 2 = xlColumns
+            # $oChart.ChartTitle.Text = "Top " + $chartLimit.ToString() + " " + $tabname
+            $oShape.Height = $oShape.Height * 2
+        }
+
+        $oAxes = $oChart.Axes(1)
+        $oAxes.ReversePlotOrder = $true
+        $oAxes.TickLabelSpacing = 1
+
+        $dummy = $worksheet.Range("A2").Select()
+
+        # Release COM interface references
+        $dummy = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($oAxes)
+        $dummy = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($oChartObject)
+        $dummy = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($oShape)
+    }
+
     # Release COM interface references
     $dummy = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($query)
     $dummy = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($Connector)
@@ -240,13 +301,13 @@ function AddWorksheetFromCsvFile([string]$filename, [string]$tabname, [string]$C
 }
 
 # Add a new named worksheet from in-memory CSV data (string array), optionally replacing encoded CrLf with CrLf.
-function AddWorksheetFromCsvData([string[]]$csv, [string]$tabname, [string]$CrLfEncoded)
+function AddWorksheetFromCsvData([string[]]$csv, [string]$tabname, [string]$CrLfEncoded, [switch]$AddChart)
 {
     Write-Host "Preparing data for tab `"$tabname`"..." -ForegroundColor Cyan
 
     if ($null -eq $global:ExcelAppInstance) { return $null }
 
-    if ($null -ne $csv)
+    if ($null -ne $csv -and $csv.Length -gt 0)
     {
         $OutputEncodingPrevious = $OutputEncoding
         $OutputEncoding = [System.Text.ASCIIEncoding]::Unicode
@@ -255,7 +316,7 @@ function AddWorksheetFromCsvData([string[]]$csv, [string]$tabname, [string]$CrLf
 
         $csv | Out-File $tempfile -Encoding unicode
 
-        AddWorksheetFromCsvFile -filename $tempfile -tabname $tabname -CrLfEncoded $CrLfEncoded
+        AddWorksheetFromCsvFile -filename $tempfile -tabname $tabname -CrLfEncoded $CrLfEncoded -AddChart:$AddChart
 
         Remove-Item $tempfile
 
@@ -428,3 +489,6 @@ Set-Variable -Name NeverExecutableExts -Option Constant -Value `
     ".zip", ".7z", ".tar",
     ".wav", ".wmv", ".mp3", ".mp4", ".mpg", ".mpeg", ".avi", ".mov"
 
+Set-Variable -Name sNoPublisher -Option Constant -Value "-"
+Set-Variable -Name sUnsigned    -Option Constant -Value "[not signed]"
+Set-Variable -Name sFiltered    -Option Constant -Value "FILTERED"
