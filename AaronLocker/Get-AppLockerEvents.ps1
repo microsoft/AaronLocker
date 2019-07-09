@@ -33,6 +33,7 @@ See the detailed parameter descriptions for more information.
 
 Output fields:
 
+* Location      high-level indicator of file location, such as "User profile," "Hot/removable," "ProgramData," etc.
 * GenericPath   is the original file path with "%LOCALAPPDATA%" replacing the beginning of the path name
                 if it matches the typical pattern "C:\Users\[username]\AppData\Local".
                 Makes similar replacements for "%APPDATA%" or "%USERPROFILE%" if LOCALAPPDATA isn't applicable.
@@ -133,9 +134,9 @@ Get warning and error events from events exported into ForwardedEvents1.evtx and
 
 .EXAMPLE
 
-.\Get-AppLockerEvents.ps1 -Objects | Where-Object { $_.PublisherName -eq "-" }
+.\Get-AppLockerEvents.ps1 -Objects | Where-Object { $_.PublisherName -eq "[not signed]" }
 
-Get warning and error events from the default AppLocker logs where target file is unsigned (publisher name is "-"). Results are output to the PowerShell pipeline as PSCustomObjects.
+Get warning and error events from the default AppLocker logs where target file is unsigned. Results are output to the PowerShell pipeline as PSCustomObjects.
 
 .EXAMPLE
 
@@ -359,9 +360,9 @@ if ($AllEvents)
 {
     $eventIdFilter = "$ExeDllAllowed or $MsiScriptAllowed or $PkgdAppAllowed or $ExeDllWarning or $MsiScriptWarning or $PkgdAppWarning or $ExeDllError or $MsiScriptError or $PkgdAppError"
 }
-if (($ForwardedEvents -or $EventLogNames) -and !$NoFilteredMachines)
+if (($ForwardedEvents -or $EventLogNames -or $EvtxLogFilePaths) -and !$NoFilteredMachines)
 {
-    # If forwarded events, also pick up subscription bookmark events. (Assume that $EventLogNames implies event collector.)
+    # If forwarded events, also pick up subscription bookmark events. (Assume that $EventLogNames implies event collector, and that $EvtxLogFilePaths might.)
     $eventIdFilter += " or $SubscriptionBkmrk"
 }
 $eventIdFilter = "($eventIdFilter)"
@@ -395,15 +396,20 @@ $PsPolicyTestFileHash2 = "0x96AD1146EB96877EAB5942AE0736B82D8B5E2039A80D3D693266
     Note: as of 17 June 2019, still seeing both hashes in different environments.
 #>
 
+# Filepath pattern that can be replaced by %PUBLIC%
+$PublicPattern       = "^(%OSDRIVE%|C:)\\Users\\Public\\"
 # Filepath pattern that can be replaced by %LOCALAPPDATA%
 $LocalAppDataPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Local\\"
 # Filepath pattern that can be replaced by %APPDATA%
 $RoamingAppDataPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Roaming\\"
 # Filepath pattern that can be replaced by %USERPROFILE% (after the above already done)
 $UserProfilePattern  = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\"
+# FIlepath pattern that can be replaced by %PROGRAMDATA%
+$ProgramDataPattern  = "^(%OSDRIVE%|C:)\\ProgramData\\"
 
 # Tab-delimited CSV headers
 $headers =
+    "Location"      + "`t" +
     "GenericPath"   + "`t" +
     "GenericDir"    + "`t" +
     "OriginalPath"  + "`t" +
@@ -657,7 +663,20 @@ $oLines = @(
             $userSid = $Properties[1].ToString()
             $username = SidToNameLookup -sid $userSid
             $sPID = $Properties[2].ToString()
-            $pubInfo = $Properties[3].Split("\") # Publisher info, separated with backslashes
+            if ($Properties[3] -eq "-")
+            {
+                $pubName = $sUnsigned
+                $prodName = $binaryName = $filever = [string]::Empty
+            }
+            else
+            {
+                # Break up Fqdn publisher info
+                $pubInfo = $Properties[3].Split("\") # Publisher info, separated with backslashes
+                $pubName = $pubInfo[0]               # Publisher name
+                $prodName = $pubInfo[1]              # Product name (syntax works even if array not this long)
+                $binaryName = $pubInfo[2]            # Original "binary" name (syntax works even if array not this long)
+                $filever = $pubInfo[3]               # File version (syntax works even if array not this long)
+            }
 
             if ($isAppxEvent)
             {
@@ -665,6 +684,7 @@ $oLines = @(
                 $filename = $genpath = $gendir = $origPath
                 $fileext = [string]::Empty
                 $hash = "N/A"
+                $location = "Packaged app"
             }
             else
             {
@@ -672,23 +692,51 @@ $oLines = @(
                 $filename = [System.IO.Path]::GetFileName($origPath)
                 $fileext = [System.IO.Path]::GetExtension($origPath)
                 # Generic path replaces user-specific paths with more generic variable syntax.
-                # Userprofile has to be performed after more specific appdata replacements.
-                $genpath = (($origPath -replace $LocalAppDataPattern, "%LOCALAPPDATA%\") -replace $RoamingAppDataPattern, "%APPDATA%\") -replace $UserProfilePattern, "%USERPROFILE%\"
-    $gendir = $null
+                # Userprofile has to be performed after more specific appdata replacements, and Public before then.
+                $genpath = ((((( $origPath                              `
+                    -replace $ProgramDataPattern,    "%PROGRAMDATA%\")  `
+                    -replace $PublicPattern,         "%PUBLIC%\")       `
+                    -replace $LocalAppDataPattern,   "%LOCALAPPDATA%\") `
+                    -replace $RoamingAppDataPattern, "%APPDATA%\")      `
+                    -replace $UserProfilePattern,    "%USERPROFILE%\")
                 $gendir = [System.IO.Path]::GetDirectoryName($genpath)
-    if ($null -eq $gendir)
-    {
-        Write-Host ($_ | fl *) -ForegroundColor Magenta
-    }
+                if ($gendir.StartsWith("%PUBLIC%"))
+                {
+                    $location = "Public profile"
+                }
+                elseif ($gendir.StartsWith("%APPDATA%") -or $gendir.StartsWith("%LOCALAPPDATA%") -or $gendir.StartsWith("%USERPROFILE%"))
+                {
+                    $location = "User profile"
+                }
+                elseif ($gendir.StartsWith("%PROGRAMDATA%"))
+                {
+                    $location = "ProgramData"
+                }
+                elseif ($gendir.StartsWith("%HOT%") -or $gendir.StartsWith("%REMOVABLE%"))
+                {
+                    $location = "Hot/Removable"
+                }
+                elseif ($gendir.StartsWith("\\") -or ($genPath.Substring(1, 2) -eq ":\"))
+                {
+                    $location = "Drive/UNC"
+                }
+                elseif ($gendir.StartsWith("%WINDIR%") -or $gendir.StartsWith("%SYSTEM32%") -or $gendir.StartsWith("%PROGRAMFILES%"))
+                {
+                    $location = "Windir/ProgramFiles"
+                }
+                elseif ($gendir.StartsWith("%OSDRIVE%"))
+                {
+                    $location = "Non-default root"
+                }
+                else
+                {
+                    $location = "Other"
+                }
             }
 
-            # Break up Fqdn publisher info
-            $pubName = $pubInfo[0]                        # Publisher name
-            $prodName = $pubInfo[1]                       # Product name (syntax works even if array not this long)
-            $binaryName = $pubInfo[2]                     # Original "binary" name (syntax works even if array not this long)
-            $filever = $pubInfo[3]                        # File version (syntax works even if array not this long)
-
             # Output tab-delimited CSV (faster to do this and then convert to objects later than to create objects to begin with)
+            # Also, this avoids having dquotes around everything.
+            $location      + "`t" +
             $genpath       + "`t" +
             $gendir        + "`t" +
             $origPath      + "`t" +
@@ -731,6 +779,7 @@ if (!$NoFilteredMachines)
             if (!$ReportedMachines.ContainsKey($machineName))
             {
                 # Output the data as CSV
+                <# Location      #>  "" + "`t" +
                 <# GenericPath   #>  "" + "`t" +
                 <# GenericDir    #>  "" + "`t" +
                 <# OriginalPath  #>  "" + "`t" +
@@ -748,7 +797,7 @@ if (!$NoFilteredMachines)
                 <# EventTime     #>  "" + "`t" +
                 <# EventTimeXL   #>  "" + "`t" +
                 <# PID           #>  "" + "`t" +
-                <# EventType     #>  "FILTERED"
+                <# EventType     #>  $sFiltered
             }
         }
     )

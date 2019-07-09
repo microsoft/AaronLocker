@@ -2,6 +2,7 @@
 .SYNOPSIS
 Download Sysinternals accesschk.exe into the parent directory above this script's directory.
 
+TODO: Maybe add an optional target directory.
 TODO: Maybe add a required -AcceptEula switch
 #>
 
@@ -12,4 +13,4 @@ $targetDir = [System.IO.Directory]::GetParent($thisDir).FullName
 Invoke-WebRequest -Uri https://live.sysinternals.com/accesschk.exe -OutFile (Join-Path $targetDir "accesschk.exe")
 #TODO: Verify that Invoke-Request succeeded.
 
-#TODO: Set the LastWriteTime to match
+#TODO: Set the LastWriteTime to match (might need to copy from UNC path instead of https to get that)
