@@ -40,6 +40,7 @@ $ps1_CreatePoliciesWDAC         = [System.IO.Path]::Combine($rootDir, "Create-Po
 
 # Path to results from scanning files listed in GetExeFilesToBlacklist
 $ExeBlacklistData = [System.IO.Path]::Combine($scanResultsDir, "ExeBlacklistData.txt")
+$WDACExeBlacklistData = [System.IO.Path]::Combine($mergeRulesDynamicDir, "WDACRulesExeBlocklist.xml")
 # Paths to "full" results of all user-writable directories under Windir and the ProgramFiles directories.
 # Written to when Rescan enabled; used to create the next set of files
 $windirFullXml    = [System.IO.Path]::Combine($scanResultsDir, "Writable_Full_windir.xml")

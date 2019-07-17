@@ -31,7 +31,7 @@ if ( $ProcessWDACLikeAppLocker -and ( ! ( (Test-Path($windirTxt)) -and (Test-Pat
 #>
 
 ####################################################################################################
-# Build WDAC rules starting with base Windows works example policy
+# Build WDAC rules starting with base "Windows works" example policy
 ####################################################################################################
 
 # Delete previous set of dynamically-generated rules first
@@ -43,73 +43,52 @@ $WDACBaseXML = ($env:windir+"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindo
 $WDACPathsToAllowXML = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "PathsToAllow.xml"))
 $WDACBlockListXML = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACRulesFileBase + "BlockList.xml"))
 
-if ( !($ProcessWDACLikeAppLocker) )
-{
-    ####################################################################################################
-    # Add Windir, PF, and PFx86 to $PathsToAllow
-    ####################################################################################################
-    # Build arrays of allowed paths with duplicates removed. (E.g., System32\Com\dmp and
-    # SysWOW64\Com\dmp can both be covered with a single entry.)
-    $WDACPathsToAllow = @()
-    $WDACPathsToAllow += $PathsToAllow,"%windir%\","%ProgramFiles%\"
-    if ($null -ne ${env:ProgramFiles(x86)}) {$WDACPathsToAllow += "%ProgramFiles(x86)%\"}
+####################################################################################################
+# Add Windir, PF, and PFx86 to $PathsToAllow then create allow rule policy
+####################################################################################################
+# Due to WDAC bug with system variables for Program Files, workaround with prepended wildcard
+$WDACPathsToAllow = @($PathsToAllow)
+$WDACPathsToAllow += "%windir%\*","*\Program Files\*"
+if ($null -ne ${env:ProgramFiles(x86)}) {$WDACPathsToAllow += "*\Program Files (x86)\*"}
 
-    $WDACPathsToAllow | foreach {
-        # If path is an existing directory and doesn't have trailing "\*" appended, fix it so that it does.
-        # If path is a file, don't append \*. If the path ends with \*, no need for further validation.
-        # If it doesn't end with \* but Get-Item can't identify it as a file or a directory, write a warning and accept it as is.
-        $pathToAllow = $_
-        $WDACFilePathAllowRules += & New-CIPolicyRule -FilePathRule $pathToAllow -AllowFileNameFallbacks
+$WDACPathsToAllow | foreach {
+    # If path is an existing directory and doesn't have trailing "\*" appended, fix it so that it does.
+    # If path is a file, don't append \*. If the path ends with \*, no need for further validation.
+    # If it doesn't end with \* but Get-Item can't identify it as a file or a directory, write a warning and accept it as is.
+    $pathToAllow = $_
+    $WDACFilePathAllowRules += & New-CIPolicyRule -FilePathRule $pathToAllow -AllowFileNameFallbacks
+}
+New-CIPolicy -Rules $WDACFilePathAllowRules -FilePath $WDACPathsToAllowXML -UserPEs -MultiplePolicyFormat
+
+# Process exceptions for user-writable paths when a custom admin exists
+if ($ProcessWDACLikeAppLocker) 
+{
+    # Validate that scan-result files were created for user writable paths under windir and program files
+    if ( ! ( (Test-Path($windirTxt)) -and (Test-Path($PfTxt)) -and (Test-Path($Pf86Txt)) ) )
+    {
+        $errMsg = "One or more of the following files is missing:`n" +
+            "`t" + $windirTxt + "`n" +
+            "`t" + $PfTxt + "`n" +
+            "`t" + $Pf86Txt +"`n"
+        Write-Error $errMsg
+        return
     }
-    New-CIPolicy -Rules $WDACFilePathAllowRules -FilePath $WDACPathsToAllowXML -UserPEs
 }
 
-<#
 ####################################################################################################
-# Capture data for Exe files to blacklist if needed
+# Create block policy from Exe files to blacklist if needed
 ####################################################################################################
-if ( $Rescan -or !(Test-Path($ExeBlacklistData) ) )
+if ( $Rescan -or !(Test-Path($WDACExeBlacklistData) ) )
 {
     Write-Host "Processing EXE files to blacklist..." -ForegroundColor Cyan
-    # Get the EXE files to blacklist from the script that produces that list.
-    $exeFilesToBlacklist = (& $ps1_GetExeFilesToBlacklist)
     # Create a hash collection for publisher information. Key on publisher name, product name, and binary name.
     # Add to collection if equivalent is not already in the collection.
-    $pubCollection = @{}
-    $exeFilesToBlacklist | foreach {
-	    $pub = (Get-AppLockerFileInformation "$_").Publisher
-        if ($null -ne $pub)
-        {
-	        $pubKey = ($pub.PublisherName + "|" + $pub.ProductName + "|" + $pub.BinaryName).ToLower()
-	        if (!$pubCollection.ContainsKey($pubKey)) { $pubCollection.Add($pubKey, $pub) }
-        }
-        else
-        {
-            Write-Warning "UNABLE TO BUILD BLACKLIST RULE FOR $_"
-        }
-    }
-
-    $pubCollection.Values | 
-        Select-Object PublisherName, ProductName, BinaryName | 
-        ConvertTo-Csv -NoTypeInformation |
-        Out-File $ExeBlacklistData -Encoding unicode
+	$WDACExeFilesToBlock = & New-CIPolicyRule -DriverFiles $exeFilesToBlackList -Level FilePublisher -Fallback FileName, Hash, FilePath -Deny
+    New-CIPolicy -Rules $WDACExeFilesToBlock -FilePath $WDACExeBlacklistData -UserPEs -MultiplePolicyFormat
 }
 
 <#
 ####################################################################################################
-# Validate that scan-result files were created
-####################################################################################################
-
-if ( ! ( (Test-Path($windirTxt)) -and (Test-Path($PfTxt)) -and (Test-Path($Pf86Txt)) ) )
-{
-    $errMsg = "One or more of the following files is missing:`n" +
-        "`t" + $windirTxt + "`n" +
-        "`t" + $PfTxt + "`n" +
-        "`t" + $Pf86Txt +"`n"
-    Write-Error $errMsg
-    return
-}
-
 if ( ! (Test-Path($ExeBlacklistData)) )
 {
     $errMsg = "The following file is missing:`n" +
