@@ -41,7 +41,6 @@ Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "WDAC*.xml"))
 # Build WDAC rules starting with base Windows works example policy
 $WDACBaseXML = ($env:windir+"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml") 
 $WDACPathsToAllowXML = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "PathsToAllow.xml"))
-$WDACBlockListXML = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACRulesFileBase + "BlockList.xml"))
 
 ####################################################################################################
 # Add Windir, PF, and PFx86 to $PathsToAllow then create allow rule policy
@@ -78,27 +77,21 @@ if ($ProcessWDACLikeAppLocker)
 ####################################################################################################
 # Create block policy from Exe files to blacklist if needed
 ####################################################################################################
-if ( $Rescan -or !(Test-Path($WDACExeBlacklistData) ) )
+if ( $Rescan -or !(Test-Path($WDACBlockPolicyXML) ) )
 {
-    Write-Host "Processing EXE files to blacklist..." -ForegroundColor Cyan
+    Write-Host "Processing EXE files to block..." -ForegroundColor Cyan
     # Create a hash collection for publisher information. Key on publisher name, product name, and binary name.
     # Add to collection if equivalent is not already in the collection.
-	$WDACExeFilesToBlock = & New-CIPolicyRule -DriverFiles $exeFilesToBlackList -Level FilePublisher -Fallback FileName, Hash, FilePath -Deny
-    New-CIPolicy -Rules $WDACExeFilesToBlock -FilePath $WDACExeBlacklistData -UserPEs -MultiplePolicyFormat
+    $WDACExeFilesToBlock = @()
+    $WDACExeFilesToBlock += $exeFilesToBlackList
+	$WDACBlockRules = & New-CIPolicyRule  -DriverFilePath $WDACExeFilesToBlock -Level FilePublisher -Fallback FileName, Hash, FilePath -Deny
+    New-CIPolicy -Rules $WDACBlockRules -FilePath $WDACBlockPolicyXML -UserPEs -MultiplePolicyFormat
 }
+
 
 <#
 ####################################################################################################
-if ( ! (Test-Path($ExeBlacklistData)) )
-{
-    $errMsg = "The following file is missing:`n" +
-        "`t" + $ExeBlacklistData +"`n"
-    Write-Error $errMsg
-    return
-}
-
-####################################################################################################
-# Process Windir and ProgramFiles directories.
+# TODO (one day)
 ####################################################################################################
 
 # --------------------------------------------------------------------------------

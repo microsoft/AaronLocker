@@ -38,9 +38,12 @@ $ps1_KnownAdmins                = [System.IO.Path]::Combine($customizationInputs
 $ps1_CreatePoliciesAppLocker    = [System.IO.Path]::Combine($rootDir, "Create-Policies-AppLocker.ps1")
 $ps1_CreatePoliciesWDAC         = [System.IO.Path]::Combine($rootDir, "Create-Policies-WDAC.ps1")
 
+# File prefixes for AppLocker and WDAC
+$rulesFileBase = "AppLockerRules-"
+$WDACrulesFileBase = "WDACRules-"
 # Path to results from scanning files listed in GetExeFilesToBlacklist
 $ExeBlacklistData = [System.IO.Path]::Combine($scanResultsDir, "ExeBlacklistData.txt")
-$WDACExeBlacklistData = [System.IO.Path]::Combine($mergeRulesDynamicDir, "WDACRulesExeBlocklist.xml")
+$WDACBlockPolicyXML = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
 # Paths to "full" results of all user-writable directories under Windir and the ProgramFiles directories.
 # Written to when Rescan enabled; used to create the next set of files
 $windirFullXml    = [System.IO.Path]::Combine($scanResultsDir, "Writable_Full_windir.xml")
@@ -71,8 +74,6 @@ $dtNow = [datetime]::Now
 $strRuleDocTimestamp = $dtNow.ToString("yyyy-MM-dd HH:mm")
 $strFnameTimestamp = $dtNow.ToString("yyyyMMdd-HHmm")
 $strTimestampForHashRule = $dtNow.ToString("yyyyMMddHHmmss")
-$rulesFileBase = "AppLockerRules-"
-$WDACrulesFileBase = "WDACRules-"
 $rulesFileAuditSuffix = "-Audit.xml"
 $rulesFileEnforceSuffix = "-Enforce.xml"
 $rulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileAuditSuffix)
