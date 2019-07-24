@@ -12,6 +12,13 @@ Part I of this document is a high-level description of whitelisting concepts, Ap
 
 A personal note: the name “AaronLocker” was Chris (@appcompatguy) Jackson’s idea – not mine – and I resisted it for a long time. I finally gave in because I couldn’t come up with a better name.
 
+# Demos
+
+7 minute "Intro to 'AaronLocker:'"
+https://youtu.be/nQyODwPR5qo
+
+13 minute "AaronLocker Quick Start" - how to build, customize, and deploy robust and practical AppLocker rules quickly using AaronLocker:
+https://youtu.be/E-IrqFtJOKU
 
 # Contributing
 
