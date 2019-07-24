@@ -14,10 +14,10 @@ A personal note: the name “AaronLocker” was Chris (@appcompatguy) Jackson’
 
 # Demos
 
-7 minute "Intro to 'AaronLocker:'"
+7 minute "Intro to 'AaronLocker'" (circa Feb. 2019):
 https://youtu.be/nQyODwPR5qo
 
-13 minute "AaronLocker Quick Start" - how to build, customize, and deploy robust and practical AppLocker rules quickly using AaronLocker:
+13 minute "AaronLocker Quick Start" - how to build, customize, and deploy robust and practical AppLocker rules quickly using AaronLocker (circa Feb. 2019):
 https://youtu.be/E-IrqFtJOKU
 
 # Contributing
