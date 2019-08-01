@@ -84,13 +84,27 @@ RuleCollection = "Script";
 PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
 }
 
+# During Windows upgrade, setup loads %OSDRIVE%\$WINDOWS.~BT\SOURCES\GENERALTEL.DLL, which loads two other DLLs in the same directory
 @{
-# During Windows upgrade, setup loads %OSDRIVE%\$WINDOWS.~BT\SOURCES\GENERALTEL.DLL
-label = "Allow execution of %OSDRIVE%\$WINDOWS.~BT\SOURCES\GENERALTEL.DLL during Windows upgrade";
+label = "Allow selected files from %OSDRIVE%\$WINDOWS.~BT\SOURCES during Windows upgrade";
 RuleCollection = "Dll";
 PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
 ProductName = "MICROSOFT® WINDOWS® OPERATING SYSTEM";
 BinaryName = "GENERALTEL.DLL";
+}
+@{
+label = "Allow selected files from %OSDRIVE%\$WINDOWS.~BT\SOURCES during Windows upgrade";
+RuleCollection = "Dll";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "MICROSOFT® WINDOWS® OPERATING SYSTEM";
+BinaryName = "WDSCORE.DLL";
+}
+@{
+label = "Allow selected files from %OSDRIVE%\$WINDOWS.~BT\SOURCES during Windows upgrade";
+RuleCollection = "Dll";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "MICROSOFT® WINDOWS® OPERATING SYSTEM";
+BinaryName = "AEINV.DLL";
 }
 
 # Uncomment this block if Google Chrome is installed to ProgramFiles.
