@@ -11,72 +11,36 @@ Create-Policies-WDAC.ps1 is called by Create-Policies.ps1 to generate comprehens
 
 #>
 
-<#
-Write-Host "Rescan: "$Rescan -ForegroundColor Cyan
-Write-Host "AppLockerOrWDAC: "$AppLockerOrWDAC -ForegroundColor Cyan
-Write-Host "ProcessWDACLikeAppLocker: "$ProcessWDACLikeAppLocker -ForegroundColor Cyan
-Write-Host "Custom admins: " -ForegroundColor Cyan
-$knownAdmins
-Write-Host "exeFilesToBlackList: " -ForegroundColor Cyan
-$exeFilesToBlacklist
-if ( $ProcessWDACLikeAppLocker -and ( ! ( (Test-Path($windirTxt)) -and (Test-Path($PfTxt)) -and (Test-Path($Pf86Txt)) ) ))
-{
-    $errMsg = "One or more of the following files is missing:`n" +
-        "`t" + $windirTxt + "`n" +
-        "`t" + $PfTxt + "`n" +
-        "`t" + $Pf86Txt +"`n"
-    Write-Error $errMsg
-    return
-}
-#>
-
 ####################################################################################################
-# Build WDAC rules starting with base "Windows works" example policy
+# Build WDAC rules separating Allow rules and Deny rules into separate policies
 ####################################################################################################
 
 # Delete previous set of dynamically-generated rules first
 Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "WDAC*.xml"))
 
 # --------------------------------------------------------------------------------
-# Build WDAC rules starting with base Windows works example policy
+# Build WDAC allow rules starting with base Windows works example policy
 $WDACBaseXML = ($env:windir+"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml") 
 $WDACPathsToAllowXML = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "PathsToAllow.xml"))
 
-####################################################################################################
 # Add Windir, PF, and PFx86 to $PathsToAllow then create allow rule policy
-####################################################################################################
-# Due to WDAC bug with system variables for Program Files, workaround with prepended wildcard
+# WDAC does not work with system variables for Program Files, so rules will be based on the values for the machine where the scan runs.
 $WDACPathsToAllow = @($PathsToAllow)
-$WDACPathsToAllow += "%windir%\*","*\Program Files\*"
-if ($null -ne ${env:ProgramFiles(x86)}) {$WDACPathsToAllow += "*\Program Files (x86)\*"}
+$WDACPathsToAllow += "%windir%\*"
+$WDACPathsToAllow += $env:ProgramFiles+"\*"
+if ($null -ne ${env:ProgramFiles(x86)}) {$WDACPathsToAllow += (${env:ProgramFiles(x86)}+"\*")}
 
 $WDACPathsToAllow | foreach {
-    # If path is an existing directory and doesn't have trailing "\*" appended, fix it so that it does.
-    # If path is a file, don't append \*. If the path ends with \*, no need for further validation.
-    # If it doesn't end with \* but Get-Item can't identify it as a file or a directory, write a warning and accept it as is.
     $pathToAllow = $_
     $WDACFilePathAllowRules += & New-CIPolicyRule -FilePathRule $pathToAllow -AllowFileNameFallbacks
 }
 New-CIPolicy -Rules $WDACFilePathAllowRules -FilePath $WDACPathsToAllowXML -UserPEs -MultiplePolicyFormat
 
-# Process exceptions for user-writable paths when a custom admin exists
-if ($ProcessWDACLikeAppLocker) 
-{
-    # Validate that scan-result files were created for user writable paths under windir and program files
-    if ( ! ( (Test-Path($windirTxt)) -and (Test-Path($PfTxt)) -and (Test-Path($Pf86Txt)) ) )
-    {
-        $errMsg = "One or more of the following files is missing:`n" +
-            "`t" + $windirTxt + "`n" +
-            "`t" + $PfTxt + "`n" +
-            "`t" + $Pf86Txt +"`n"
-        Write-Error $errMsg
-        return
-    }
-}
 
-####################################################################################################
-# Create block policy from Exe files to blacklist if needed
-####################################################################################################
+# --------------------------------------------------------------------------------
+# Create block policy from Exe files to blacklist if needed. Merge the deny rules with the allow all example policy.
+$WDACDenyBaseXML = ($env:windir+"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml") 
+$WDACBlockPolicyXML = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
 if ( $Rescan -or !(Test-Path($WDACBlockPolicyXML) ) )
 {
     Write-Host "Processing EXE files to block..." -ForegroundColor Cyan
@@ -91,172 +55,14 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXML) ) )
 
 <#
 ####################################################################################################
-# TODO (one day)
+# TODO (one day When WDAC adds exception support, allow AppLocker-style rules)
+# Note that WDAC, by-default, enforces a run-time check that the current directory does not grant write permissions to non-standard admin users.
+# However, the runtime check by WDAC is not a security feature in Windows and won't prevent a malicious user from altering the ACLs to make a previously
+# user-writable path pass the admin-only check after the fact. 
 ####################################################################################################
+# Process exceptions for user-writable paths when a custom admin exists
 
-# --------------------------------------------------------------------------------
-# Read the lists of user-writable directories with redundancies removed.
-$Wr_raw_windir = (Get-Content $windirTxt)
-$Wr_raw_PF     = (Get-Content $PfTxt)
-$Wr_raw_PF86   = (Get-Content $Pf86Txt)
-
-# --------------------------------------------------------------------------------
-# Process names of directories, replacing hardcoded C:\, \Windows, etc., with AppLocker variables.
-# Note that System32 and SysWOW64 map to the same variable names, as do the two ProgramFiles directories.
-# Add trailing backslashes to the names (e.g., C:\Windows\System32\ ), so that if there happens to be
-# a "C:\Windows\System32Extra" it won't match the System32 variable.
-# Note that because of the trailing backslashes, if the top directories themselves are user-writable,
-# they won't turn up in the list. That by itself would be a major problem, though.
-$sSystem32 = "$env:windir\System32\".ToLower()
-$sSysWow64 = "$env:windir\SysWOW64\".ToLower()
-$sWindir   = "$env:windir\".ToLower()
-$sPF86     = "${env:ProgramFiles(x86)}\".ToLower()
-$sPF       = "$env:ProgramFiles\".ToLower()
-
-# Build arrays of processed directory names with duplicates removed. (E.g., System32\Com\dmp and
-# SysWOW64\Com\dmp can both be covered with a single entry.)
-[System.Collections.ArrayList]$Wr_windir = @()
-[System.Collections.ArrayList]$Wr_PF = @()
-
-# For the Windows list, replace matching System32, SysWOW64, and Windows paths with corresponding
-# AppLocker variables, then add to collection if not already present.
-$Wr_raw_windir | foreach {
-	$dir = $_.ToLower()
-	if ($dir.StartsWith($sSystem32))     { $dir = "%SYSTEM32%\" + $dir.Substring($sSystem32.Length) }
-	elseif ($dir.StartsWith($sSysWow64)) { $dir = "%SYSTEM32%\" + $dir.Substring($sSysWow64.Length) }
-	elseif ($dir.StartsWith($sWindir))   { $dir = "%WINDIR%\"   + $dir.Substring($sWindir.Length)   }
-    # Don't add the rule twice if it appears in both System32 and SysWOW64, since both map to %SYSTEM32%.
-    if (!$Wr_windir.Contains($dir))
-    {
-    	$Wr_windir.Add($dir) | Out-Null
-    }
-}
-
-# For the two ProgramFiles lists, replace top directory with AppLocker variable, then add to collection
-# if not already present.
-$Wr_raw_PF86 | foreach {
-	$dir = $_.ToLower()
-	if ($dir.StartsWith($sPF86))     { $dir = "%PROGRAMFILES%\" + $dir.Substring($sPF86.Length) }
-	$Wr_PF.Add($dir) | Out-Null
-}
-
-$Wr_raw_PF | foreach {
-	$dir = $_.ToLower()
-	if ($dir.StartsWith($sPF))     { $dir = "%PROGRAMFILES%\" + $dir.Substring($sPF.Length) }
-	# Possibly already added same directory from PF86; don't add again
-	if (!$Wr_PF.Contains($dir))
-	{
-		$Wr_PF.Add($dir) | Out-Null
-	}
-}
-
-####################################################################################################
-# Incorporate data for EXE files to blacklist under Windir
-####################################################################################################
-
-# Incorporate the EXE blacklist into the document where the one PLACEHOLDER_WINDIR_EXEBLACKLIST
-# placeholder is.
-$xPlaceholder = $xDocument.SelectNodes("//PLACEHOLDER_WINDIR_EXEBLACKLIST")[0]
-$xExcepts = $xPlaceholder.ParentNode
-
-$csvExeBlacklistData = (Get-Content $ExeBlacklistData | ConvertFrom-Csv)
-$csvExeBlacklistData | foreach {
-    # Create a FilePublisherCondition element with the publisher attributes
-    $elem = $xDocument.CreateElement("FilePublisherCondition")
-    $elem.SetAttribute("PublisherName", $_.PublisherName)
-    $elem.SetAttribute("ProductName", $_.ProductName)
-    $elem.SetAttribute("BinaryName", $_.BinaryName)
-    # Set version number range to "any"
-    $elemVerRange = $xDocument.CreateElement("BinaryVersionRange")
-    $elemVerRange.SetAttribute("LowSection", "*")
-    $elemVerRange.SetAttribute("HighSection", "*")
-    # Add the version range to the publisher condition
-    $elem.AppendChild($elemVerRange) | Out-Null
-    # Add the publisher condition where the placeholder is
-    $xExcepts.AppendChild($elem) | Out-Null
-}
-# Remove the placeholder element
-$xExcepts.RemoveChild($xPlaceholder) | Out-Null
-
-Write-Host "Processing additional safe paths to whitelist..." -ForegroundColor Cyan
-# Get additional whitelisted paths from the script that produces that list and incorporate them into the document
-$PathsToAllow = (& $ps1_GetSafePathsToAllow)
-# Add "allow" for Everyone for Exe, Dll, and Script rules
-$xRuleCollections = $xDocument.SelectNodes("//RuleCollection[@Type='Exe' or @Type='Script' or @Type='Dll']")
-foreach($xRuleCollection in $xRuleCollections)
-{
-    $PathsToAllow | foreach {
-        # If path is an existing directory and doesn't have trailing "\*" appended, fix it so that it does.
-        # If path is a file, don't append \*. If the path ends with \*, no need for further validation.
-        # If it doesn't end with \* but Get-Item can't identify it as a file or a directory, write a warning and accept it as is.
-        $pathToAllow = $_
-        if (!$pathToAllow.EndsWith("\*"))
-        {
-            $pathItem = Get-Item $pathToAllow -Force -ErrorAction SilentlyContinue
-            if ($pathItem -eq $null)
-            {
-                Write-Warning "Cannot verify path $pathItem; adding to rule set as is."
-            }
-            elseif ($pathItem -is [System.IO.DirectoryInfo])
-            {
-                Write-Warning "Appending `"\*`" to rule for $pathToAllow"
-                $pathToAllow = [System.IO.Path]::Combine($pathToAllow, "*")
-            }
-        }
-        $elemRule = $xDocument.CreateElement("FilePathRule")
-        $elemRule.SetAttribute("Action", "Allow")
-        $elemRule.SetAttribute("UserOrGroupSid", "S-1-1-0")
-        $elemRule.SetAttribute("Id", [GUID]::NewGuid().Guid)
-        $elemRule.SetAttribute("Name", "Additional allowed path: " + $pathToAllow)
-        $elemRule.SetAttribute("Description", "Allows Everyone to execute from " + $pathToAllow)
-        $elemConditions = $xDocument.CreateElement("Conditions")
-        $elemCondition = $xDocument.CreateElement("FilePathCondition")
-        $elemCondition.SetAttribute("Path", $pathToAllow)
-        $elemConditions.AppendChild($elemCondition) | Out-Null
-        $elemRule.AppendChild($elemConditions) | Out-Null
-        $xRuleCollection.AppendChild($elemRule) | Out-Null
-    }
-}
-
-# Incorporate path-exception rules for the user-writable directories under %windir%
-# in the the EXE, DLL, and SCRIPT rules.
-# Find the placeholders for Windows subdirectories, and add the path conditions there.
-# Then remove the placeholders.
-$xPlaceholders = $xDocument.SelectNodes("//PLACEHOLDER_WINDIR_WRITABLEDIRS")
-foreach($xPlaceholder in $xPlaceholders)
-{
-	$xExcepts = $xPlaceholder.ParentNode
-	$Wr_windir | foreach {
-		$elem = $xDocument.CreateElement("FilePathCondition")
-		$elem.SetAttribute("Path", $_)
-		$xExcepts.AppendChild($elem) | Out-Null
-	}
-	$xExcepts.RemoveChild($xPlaceholder) | Out-Null
-}
-
-# Incorporate path-exception rules for the user-writable directories under %PF%
-# in EXE, DLL, and SCRIPT rules.
-# Find the placeholders for PF subdirectories, and add the path conditions there.
-# Then remove the placeholders.
-$xPlaceholders = $xDocument.SelectNodes("//PLACEHOLDER_PF_WRITABLEDIRS")
-foreach($xPlaceholder in $xPlaceholders)
-{
-	$xExcepts = $xPlaceholder.ParentNode
-	$Wr_PF | foreach {
-		$elem = $xDocument.CreateElement("FilePathCondition")
-		$elem.SetAttribute("Path", $_)
-		$xExcepts.AppendChild($elem) | Out-Null
-	}
-	$xExcepts.RemoveChild($xPlaceholder) | Out-Null
-}
-
-
-####################################################################################################
-# Begin creating dynamically-generated rule fragments. Delete old ones first.
-####################################################################################################
-
-# Delete previous set of dynamically-generated rules first
-Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "*.xml"))
+# Then implement logic similar to AppLocker for the rest to build exceptions for user-writable paths. The following is the current relevant code from AppLocker rule sections:
 
 
 ####################################################################################################

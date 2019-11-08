@@ -155,9 +155,15 @@ if ( ! ( (Test-Path($windirTxt)) -and (Test-Path($PfTxt)) -and (Test-Path($Pf86T
 [System.Collections.ArrayList]$knownAdmins = @()
 $knownAdmins.AddRange( @(& $ps1_KnownAdmins) )
 
-# If one or more custom admins was found, override WDAC's runtime admin-writable-only check and instead revert to AppLocker parity
+<# 
+# TODO (one day When WDAC adds exception support, we can allow AppLocker-style rules including exceptions)
+# Note that WDAC, by-default, enforces a run-time check that the current directory does not grant write permissions to non-standard admin users. 
+# However, the runtime check by WDAC is not a security feature in Windows and won't prevent a malicious user from altering the ACLs to make a previously
+# user-writable path pass the admin-only check after the fact. 
+If one or more custom admins was found, override WDAC's runtime admin-writable-only check and instead revert to AppLocker parity
 if ($knownAdmins.Count -gt 0) {$ProcessWDACLikeAppLocker = $true}
 else {$ProcessWDACLikeAppLocker = $false}
+#>
 
 # If just processing WDAC and no custom admins are defined, 
 if (($Rescan) -and ($AppLockerOrWDAC -eq "WDAC") -and !($ProcessWDACLikeAppLocker))
