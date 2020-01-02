@@ -12,16 +12,14 @@ Create-Policies-WDAC.ps1 is called by Create-Policies.ps1 to generate comprehens
 #>
 
 ####################################################################################################
-# Initialize variables used only by this script (see Config.ps1 for global variables used by AaronLocker)
+# Initialize XML template variables used only by this script (see Config.ps1 for global variables used by AaronLocker)
 ####################################################################################################
 [xml]$WDACBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml"
-$nsBase = new-object Xml.XmlNamespaceManager $WDACBaseXML.NameTable
+$WDACAllowRulesXMLFile = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "AllowRules.xml"))
+[xml]$WDACTemplateXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DenyAllAudit.xml"
+$nsBase = new-object Xml.XmlNamespaceManager $WDACTemplateXML.NameTable
 $nsBase.AddNamespace("si", "urn:schemas-microsoft-com:sipolicy")
-$WDACPathsToAllowXMLFile = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "PathsToAllow.xml"))
 [xml]$WDACDenyBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml"
-$nsDenyBase = new-object Xml.XmlNamespaceManager $WDACDenyBaseXML.NameTable
-$nsDenyBase.AddNamespace("si", "urn:schemas-microsoft-com:sipolicy")
-$WDACBlockPolicyXMLFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
 
 ####################################################################################################
 # Build WDAC Allow rules policy (Deny rules will be in separate policy created later in this script)
@@ -41,13 +39,185 @@ if ($null -ne ${env:ProgramFiles(x86)}) {$WDACPathsToAllow += (${env:ProgramFile
 
 $WDACPathsToAllow | foreach {
     $pathToAllow = $_
-    $WDACFilePathAllowRules += & New-CIPolicyRule -FilePathRule $pathToAllow -AllowFileNameFallbacks
+    $WDACAllowRules += & New-CIPolicyRule -FilePathRule $pathToAllow -AllowFileNameFallbacks
 }
-New-CIPolicy -Rules $WDACFilePathAllowRules -FilePath $WDACPathsToAllowXMLFile -UserPEs -MultiplePolicyFormat
 
+# --------------------------------------------------------------------------------
 # Create rules for trusted publishers
 Write-Host "Creating rules for trusted publishers..." -ForegroundColor Cyan
 # $node=$WDACBaseXML.SelectSingleNode("//si:Signers",$nsBase)
+
+<# Define an empty AppLocker policy to fill, with a blank publisher rule to use as a template.
+$signerPolXml = [xml]@"
+    <AppLockerPolicy Version="1">
+      <RuleCollection Type="Exe" EnforcementMode="NotConfigured">
+        <FilePublisherRule Id="" Name="" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
+          <Conditions>
+            <FilePublisherCondition PublisherName="" ProductName="*" BinaryName="*">
+              <BinaryVersionRange LowSection="*" HighSection="*" />
+            </FilePublisherCondition>
+          </Conditions>
+        </FilePublisherRule>
+      </RuleCollection>
+      <RuleCollection Type="Dll" EnforcementMode="NotConfigured"/>
+      <RuleCollection Type="Script" EnforcementMode="NotConfigured"/>
+      <RuleCollection Type="Msi" EnforcementMode="NotConfigured"/>
+    </AppLockerPolicy>
+"@
+# Get the blank publisher rule. It will be cloned to make the real publisher rules, and then this blank will be deleted.
+$fprTemplate = $signerPolXml.DocumentElement.SelectNodes("//FilePublisherRule")[0]
+#>
+
+# Run the script that produces the signer information to process. Should come in as a sequence of hashtables.
+# Each hashtable must have a label, and either an exemplar or a publisher.
+# $fprRulesEmpty: Don't generate TrustedSigners.xml if it doesn't have any rules.
+$fprRulesEmpty = $true
+$WDACsignersToBuildRulesFor = (& $ps1_TrustedSignersWDAC)
+$WDACsignersToBuildRulesFor | foreach {
+    $label = $_.label
+    if ($label -eq $null)
+    {
+        # Each hashtable must have a label.
+        Write-Warning -Message ("Invalid syntax in $ps1_TrustedSignersWDAC. No `"label`" specified.")
+    }
+    else
+    {
+        $IssuerName = $IssuerTBSHash = $publisher = $product = $filename = $fileVersion = $exemplarFile = ""
+        $good = $false
+        # Exemplar is a file signed by the PCACertificate or publisher we want to trust. If the hashtable specifies "useProduct" = $true,
+        # the WDAC rule allows anything signed by that publisher with the same ProductName.
+        if ($_.exemplar)
+        {
+            $exemplarFile = $_.exemplar
+            $level = $_.level
+            if ($level -eq $null) {$level = "Publisher"}
+            if ($_.useProduct -and ($level -in "SignedVersion","Publisher","FilePublisher")) 
+            {
+                $alfi = Get-AppLockerFileInformation $exemplarFile
+                if ($alfi -eq $null)
+                {
+                    Write-Warning -Message ("Cannot get AppLockerFileInformation for $exemplarFile")
+                }
+                elseif (!($alfi.Publisher.HasProductName))
+                {
+                    Write-Warning "Cannot get product name information for $exemplarFile"
+                }
+                else
+                {
+                    # Get ProductName.
+                    $product = $alfi.Publisher.ProductName
+                }
+            }
+            elseif ($_.useProduct -and ($level -notin "SignedVersion","Publisher","FilePublisher"))
+            {
+                Write-Warning "Specified scan Level does not support ProductName constraint for $exemplarFile"
+            }
+
+            $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $exemplarFile -Level $level
+        }
+        else
+        {
+            # Otherwise, the hashtable must specify the exact IssuerName and IssuerTBSHash to trust (and optionally PublisherName, ProductName, FileName, FileVersion).
+            $IssuerName = $_.IssuerName
+            $IssuerTBSHash = $_.IssuerTBSHash
+            $publisher = $_.PublisherName
+            $product = $_.ProductName
+            $filename = $_.FileName
+            $fileVersion = $_.FileVersion
+            if (($null -ne $IssuerName) -and ($null -ne $IssuerTBSHash))
+            {
+                $good = $true
+            }
+            else
+            {
+                # Object isn't a hashtable, or doesn't have either exemplar or PCACertificate information.
+                Write-Warning -Message ("Invalid syntax in $ps1_TrustedSignersWDAC")
+            }
+
+<#
+            if ($good)
+            {
+                $fprRulesNotEmpty = $true
+
+                # Duplicate the blank publisher rule, and populate it with information gathered.
+                $fpr = $fprTemplate.Clone()
+                $fpr.Conditions.FilePublisherCondition.PublisherName = $publisher
+
+                $fpr.Name = "$label`: Signer rule for $publisher"
+                if ($product.Length -gt 0)
+                {
+                    $fpr.Conditions.FilePublisherCondition.ProductName = $product
+                    $fpr.Name = "$label`: Signer/product rule for $publisher/$product"
+                    if ($filename.Length -gt 0)
+                    {
+                        $fpr.Conditions.FilePublisherCondition.BinaryName = $filename
+                        $fpr.Name = "$label`: Signer/product/file rule for $publisher/$product/$filename"
+                        if ($fileVersion.Length -gt 0)
+                        {
+                            $fpr.Conditions.FilePublisherCondition.BinaryVersionRange.LowSection = $fileVersion
+                        }
+                    }
+                }
+                if ($exemplarFile.Length -gt 0)
+                {
+                    $fpr.Description = "Information acquired from $exemplarFile"
+                }
+                else
+                {
+                    $fpr.Description = "Information acquired from $fname_TrustedSigners"
+                }
+                Write-Host ("`t" + $fpr.Name) -ForegroundColor Cyan
+
+                if ($publisher.ToLower().Contains("microsoft") -and $product.Length -eq 0 -and ($ruleCollection.Length -eq 0 -or $ruleCollection -eq "Exe"))
+                {
+                    Write-Warning -Message ("Warning: Trusting all Microsoft-signed files is an overly-broad whitelisting strategy")
+                }
+
+                if ($ruleCollection)
+                {
+                    $node = $signerPolXml.SelectSingleNode("//RuleCollection[@Type='" + $ruleCollection + "']")
+                    if ($node -eq $null)
+                    {[
+                        Write-Warning ("Couldn't find RuleCollection Type = " + $ruleCollection + " (RuleCollection is case-sensitive)")
+                    }
+                    else
+                    {
+                        $fpr.Id = [string]([GUID]::NewGuid().Guid)
+                        $node.AppendChild($fpr) | Out-Null
+                    }
+                }
+                else
+                {
+                    # Append a copy of the new publisher rule into each rule set with a different GUID in each.
+                    $signerPolXml.SelectNodes("//RuleCollection") | foreach {
+                        $fpr0 = $fpr.CloneNode($true)
+
+                        $fpr0.Id = [string]([GUID]::NewGuid().Guid)
+                        $_.AppendChild($fpr0) | Out-Null
+                    }
+                }
+            }
+#>
+        }
+
+    }
+}
+
+<# Don't generate the file if it doesn't contain any rules
+if ($fprRulesNotEmpty)
+{
+    # Delete the blank publisher rule from the rule set.
+    $fprTemplate.ParentNode.RemoveChild($fprTemplate) | Out-Null
+
+    #$signerPolXml.OuterXml | clip
+    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "TrustedSigners.xml")
+    # Save XML as Unicode
+    SaveXmlDocAsUnicode -xmlDoc $signerPolXml -xmlFilename $outfile
+}
+#>
+
+New-CIPolicy -Rules $WDACAllowRules -FilePath $WDACAllowRulesXMLFile -UserPEs -MultiplePolicyFormat
+
 
 ####################################################################################################
 # Create block policy from Exe files to blacklist if needed. Merge the deny rules with the allow all example policy.
@@ -75,173 +245,6 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
 
 # Then implement logic similar to AppLocker for the rest to build exceptions for user-writable paths. The following is the current relevant code from AppLocker rule sections:
 
-
-####################################################################################################
-# Create rules for trusted publishers
-####################################################################################################
-Write-Host "Creating rules for trusted publishers..." -ForegroundColor Cyan
-
-# Define an empty AppLocker policy to fill, with a blank publisher rule to use as a template.
-$signerPolXml = [xml]@"
-    <AppLockerPolicy Version="1">
-      <RuleCollection Type="Exe" EnforcementMode="NotConfigured">
-        <FilePublisherRule Id="" Name="" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
-          <Conditions>
-            <FilePublisherCondition PublisherName="" ProductName="*" BinaryName="*">
-              <BinaryVersionRange LowSection="*" HighSection="*" />
-            </FilePublisherCondition>
-          </Conditions>
-        </FilePublisherRule>
-      </RuleCollection>
-      <RuleCollection Type="Dll" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Script" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Msi" EnforcementMode="NotConfigured"/>
-    </AppLockerPolicy>
-"@
-# Get the blank publisher rule. It will be cloned to make the real publisher rules, and then this blank will be deleted.
-$fprTemplate = $signerPolXml.DocumentElement.SelectNodes("//FilePublisherRule")[0]
-
-# Run the script that produces the signer information to process. Should come in as a sequence of hashtables.
-# Each hashtable must have a label, and either an exemplar or a publisher.
-# fprRulesNotEmpty: Don't generate TrustedSigners.xml if it doesn't have any rules.
-$fprRulesNotEmpty = $false
-$signersToBuildRulesFor = (& $ps1_TrustedSigners)
-$signersToBuildRulesFor | foreach {
-    $label = $_.label
-    if ($label -eq $null)
-    {
-        # Each hashtable must have a label.
-        Write-Warning -Message ("Invalid syntax in $ps1_TrustedSigners. No `"label`" specified.")
-    }
-    else
-    {
-        $publisher = $product = $binaryname = ""
-        $filename = ""
-        $good = $false
-        # Exemplar is a file signed by the publisher we want to trust. If the hashtable specifies "useProduct" = $true,
-        # the AppLocker rule allows anything signed by that publisher with the same ProductName.
-        if ($_.exemplar)
-        {
-            $filename = $_.exemplar
-            $alfi = Get-AppLockerFileInformation $filename
-            if ($alfi -eq $null)
-            {
-                Write-Warning -Message ("Cannot get AppLockerFileInformation for $filename")
-            }
-            elseif (!($alfi.Publisher.HasPublisherName))
-            {
-                Write-Warning -Message ("Cannot get publisher information for $filename")
-            }
-            elseif ($_.useProduct -and !($alfi.Publisher.HasProductName))
-            {
-                Write-Warning "Cannot get product name information for $filename"
-            }
-            else
-            {
-                # Get publisher to trust, and optionally ProductName.
-                $publisher = $alfi.Publisher.PublisherName
-                if ($_.useProduct)
-                {
-                    $product = $alfi.Publisher.ProductName
-                }
-                $good = $true
-            }
-        }
-        else
-        {
-            # Otherwise, the hashtable must specify the exact publisher to trust (and optionally ProductName, BinaryName+collection).
-            $publisher = $_.PublisherName
-            $product = $_.ProductName
-            $binaryName = $_.BinaryName
-            $fileVersion = $_.FileVersion
-            $ruleCollection = $_.RuleCollection
-            if ($null -ne $publisher)
-            {
-                $good = $true
-            }
-            else
-            {
-                # Object isn't a hashtable, or doesn't have either exemplar or PublisherName.
-                Write-Warning -Message ("Invalid syntax in $ps1_TrustedSigners")
-            }
-        }
-
-        if ($good)
-        {
-            $fprRulesNotEmpty = $true
-
-            # Duplicate the blank publisher rule, and populate it with information gathered.
-            $fpr = $fprTemplate.Clone()
-            $fpr.Conditions.FilePublisherCondition.PublisherName = $publisher
-
-            $fpr.Name = "$label`: Signer rule for $publisher"
-            if ($product.Length -gt 0)
-            {
-                $fpr.Conditions.FilePublisherCondition.ProductName = $product
-                $fpr.Name = "$label`: Signer/product rule for $publisher/$product"
-                if ($binaryName.Length -gt 0)
-                {
-                    $fpr.Conditions.FilePublisherCondition.BinaryName = $binaryName
-                    $fpr.Name = "$label`: Signer/product/file rule for $publisher/$product/$binaryName"
-                    if ($fileVersion.Length -gt 0)
-                    {
-                        $fpr.Conditions.FilePublisherCondition.BinaryVersionRange.LowSection = $fileVersion
-                    }
-                }
-            }
-            if ($filename.Length -gt 0)
-            {
-                $fpr.Description = "Information acquired from $filename"
-            }
-            else
-            {
-                $fpr.Description = "Information acquired from $fname_TrustedSigners"
-            }
-            Write-Host ("`t" + $fpr.Name) -ForegroundColor Cyan
-
-            if ($publisher.ToLower().Contains("microsoft") -and $product.Length -eq 0 -and ($ruleCollection.Length -eq 0 -or $ruleCollection -eq "Exe"))
-            {
-                Write-Warning -Message ("Warning: Trusting all Microsoft-signed files is an overly-broad whitelisting strategy")
-            }
-
-            if ($ruleCollection)
-            {
-                $node = $signerPolXml.SelectSingleNode("//RuleCollection[@Type='" + $ruleCollection + "']")
-                if ($node -eq $null)
-                {[
-                    Write-Warning ("Couldn't find RuleCollection Type = " + $ruleCollection + " (RuleCollection is case-sensitive)")
-                }
-                else
-                {
-                    $fpr.Id = [string]([GUID]::NewGuid().Guid)
-                    $node.AppendChild($fpr) | Out-Null
-                }
-            }
-            else
-            {
-                # Append a copy of the new publisher rule into each rule set with a different GUID in each.
-                $signerPolXml.SelectNodes("//RuleCollection") | foreach {
-                    $fpr0 = $fpr.CloneNode($true)
-
-                    $fpr0.Id = [string]([GUID]::NewGuid().Guid)
-                    $_.AppendChild($fpr0) | Out-Null
-                }
-            }
-        }
-    }
-}
-
-# Don't generate the file if it doesn't contain any rules
-if ($fprRulesNotEmpty)
-{
-    # Delete the blank publisher rule from the rule set.
-    $fprTemplate.ParentNode.RemoveChild($fprTemplate) | Out-Null
-
-    #$signerPolXml.OuterXml | clip
-    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "TrustedSigners.xml")
-    # Save XML as Unicode
-    SaveXmlDocAsUnicode -xmlDoc $signerPolXml -xmlFilename $outfile
-}
 
 ####################################################################################################
 # Create custom hash rules
