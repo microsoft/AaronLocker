@@ -12,7 +12,19 @@ Create-Policies-WDAC.ps1 is called by Create-Policies.ps1 to generate comprehens
 #>
 
 ####################################################################################################
-# Build WDAC rules separating Allow rules and Deny rules into separate policies
+# Initialize variables used only by this script (see Config.ps1 for global variables used by AaronLocker)
+####################################################################################################
+[xml]$WDACBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml"
+$nsBase = new-object Xml.XmlNamespaceManager $WDACBaseXML.NameTable
+$nsBase.AddNamespace("si", "urn:schemas-microsoft-com:sipolicy")
+$WDACPathsToAllowXMLFile = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "PathsToAllow.xml"))
+[xml]$WDACDenyBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml"
+$nsDenyBase = new-object Xml.XmlNamespaceManager $WDACDenyBaseXML.NameTable
+$nsDenyBase.AddNamespace("si", "urn:schemas-microsoft-com:sipolicy")
+$WDACBlockPolicyXMLFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
+
+####################################################################################################
+# Build WDAC Allow rules policy (Deny rules will be in separate policy created later in this script)
 ####################################################################################################
 
 # Delete previous set of dynamically-generated rules first
@@ -20,9 +32,6 @@ Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "WDAC*.xml"))
 
 # --------------------------------------------------------------------------------
 # Build WDAC allow rules starting with base Windows works example policy
-$WDACBaseXML = ($env:windir+"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml") 
-$WDACPathsToAllowXML = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "PathsToAllow.xml"))
-
 # Add Windir, PF, and PFx86 to $PathsToAllow then create allow rule policy
 # WDAC does not work with system variables for Program Files, so rules will be based on the values for the machine where the scan runs.
 $WDACPathsToAllow = @($PathsToAllow)
@@ -34,14 +43,16 @@ $WDACPathsToAllow | foreach {
     $pathToAllow = $_
     $WDACFilePathAllowRules += & New-CIPolicyRule -FilePathRule $pathToAllow -AllowFileNameFallbacks
 }
-New-CIPolicy -Rules $WDACFilePathAllowRules -FilePath $WDACPathsToAllowXML -UserPEs -MultiplePolicyFormat
+New-CIPolicy -Rules $WDACFilePathAllowRules -FilePath $WDACPathsToAllowXMLFile -UserPEs -MultiplePolicyFormat
 
+# Create rules for trusted publishers
+Write-Host "Creating rules for trusted publishers..." -ForegroundColor Cyan
+# $node=$WDACBaseXML.SelectSingleNode("//si:Signers",$nsBase)
 
-# --------------------------------------------------------------------------------
+####################################################################################################
 # Create block policy from Exe files to blacklist if needed. Merge the deny rules with the allow all example policy.
-$WDACDenyBaseXML = ($env:windir+"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml") 
-$WDACBlockPolicyXML = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
-if ( $Rescan -or !(Test-Path($WDACBlockPolicyXML) ) )
+####################################################################################################
+if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
 {
     Write-Host "Processing EXE files to block..." -ForegroundColor Cyan
     # Create a hash collection for publisher information. Key on publisher name, product name, and binary name.
@@ -49,7 +60,7 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXML) ) )
     $WDACExeFilesToBlock = @()
     $WDACExeFilesToBlock += $exeFilesToBlackList
 	$WDACBlockRules = & New-CIPolicyRule  -DriverFilePath $WDACExeFilesToBlock -Level FilePublisher -Fallback FileName, Hash, FilePath -Deny
-    New-CIPolicy -Rules $WDACBlockRules -FilePath $WDACBlockPolicyXML -UserPEs -MultiplePolicyFormat
+    New-CIPolicy -Rules $WDACBlockRules -FilePath $WDACBlockPolicyXMLFile -UserPEs -MultiplePolicyFormat
 }
 
 
@@ -197,7 +208,7 @@ $signersToBuildRulesFor | foreach {
             {
                 $node = $signerPolXml.SelectSingleNode("//RuleCollection[@Type='" + $ruleCollection + "']")
                 if ($node -eq $null)
-                {
+                {[
                     Write-Warning ("Couldn't find RuleCollection Type = " + $ruleCollection + " (RuleCollection is case-sensitive)")
                 }
                 else
