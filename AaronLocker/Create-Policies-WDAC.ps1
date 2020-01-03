@@ -88,9 +88,26 @@ $WDACsignersToBuildRulesFor | foreach {
         # the WDAC rule allows anything signed by that publisher with the same ProductName.
         if ($_.exemplar)
         {
+            $label = $label.Replace(" ","_")
+            # Get count of $WDACAllowRules before adding new exemplar rule(s)
+            $CurRuleCount = $WDACAllowRules.Count
+
+            # Generate new rules from exemplar
             $exemplarFile = $_.exemplar
             $level = $_.level
             if ($level -eq $null) {$level = "Publisher"}
+            $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $exemplarFile -Level $level
+            # Determine how many new allow rules were added. This will be used to set Name to match the label and/or add ProductName restriction.
+            $NumRulesAdded = ($WDACAllowRules.Count - $CurRuleCount)
+            
+            # Set the name for each added rule to the $label specified 
+            $i=1
+            While ($i -le $NumRulesAdded)
+            {
+                $WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label
+                $i++
+            }
+
             if ($_.useProduct -and ($level -in "SignedVersion","Publisher","FilePublisher")) 
             {
                 $alfi = Get-AppLockerFileInformation $exemplarFile
@@ -106,14 +123,21 @@ $WDACsignersToBuildRulesFor | foreach {
                 {
                     # Get ProductName.
                     $product = $alfi.Publisher.ProductName
+                    <#
+                    # Reset counter and add ProductName restriction to all added rules
+                    $i=1
+                    While ($i -le $NumRulesAdded)
+                    {
+                        $WDACAllowRules[-$i].attributes.Add("ProductName", $product)
+                        $i++      
+                    }
+                    #>
                 }
             }
             elseif ($_.useProduct -and ($level -notin "SignedVersion","Publisher","FilePublisher"))
             {
                 Write-Warning "Specified scan Level does not support ProductName constraint for $exemplarFile"
             }
-
-            $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $exemplarFile -Level $level
         }
         else
         {

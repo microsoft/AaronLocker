@@ -97,7 +97,16 @@ ProductName = "MICROSOFT TEAMS";
 @{
 # Trust everything signed with the GitHub Desktop publisher
 label = "Trust the publisher of GitHub Desktop";
-exemplar = $env:USERPROFILE+"\AppData\Local\GitHubDesktop\GitHubDesktop.exe"
+exemplar = $env:USERPROFILE+"\AppData\Local\GitHubDesktop\GitHubDesktop.exe";
+}
+
+
+@{
+# Trust Update.exe signed by the publisher of Microsoft Teams.
+label = "Trust Update.exe signed by the publisher of Microsoft Teams";
+exemplar = $env:USERPROFILE+"\AppData\Local\Microsoft\Teams\Update.exe";
+level = "Publisher";
+useProduct = $true;
 }
 
 # Uncomment this block if Google Chrome is installed to ProgramFiles.

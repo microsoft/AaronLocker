@@ -168,7 +168,7 @@ else {$ProcessWDACLikeAppLocker = $false}
 # If just processing WDAC and no custom admins are defined, 
 if (($Rescan) -and ($AppLockerOrWDAC -eq "WDAC") -and !($ProcessWDACLikeAppLocker))
 {
-    Write-Host "Skipping scan for user-writable directories - not required for WDAC unless one or more custom admins exist" -ForegroundColor Cyan
+    Write-Host "Skipping scan for user-writable directories - not required for WDAC." -ForegroundColor Cyan
     $Rescan = $false
 }
 
@@ -317,7 +317,7 @@ if ($Rescan)
 # Process common custom inputs once before calling AppLocker- and WDAC-specific scripts
 ####################################################################################################
 # Get Block List -- WDAC could potentially use recommended blocks policy instead? If so, move this back to AppLocker-specific script
-if ( $Rescan -or ( ($AppLockerOrWDAC -in "Both","AppLocker") -and !(Test-Path($ExeBlacklistData) ) ) -or ( ($AppLockerOrWDAC -in "Both","WDAC") -and !(Test-Path($WDACBlockPolicyXMLFile) ) ) )
+if ( $Rescan -or ( ($AppLockerOrWDAC -in "Both","AppLocker") -and !(Test-Path($ExeBlacklistData) ) ) -or ( ($AppLockerOrWDAC -in "Both","WDAC") ) )
 {
     Write-Host "Get EXE files to blacklist for later processing..." -ForegroundColor Cyan
     # Get the EXE files to blacklist from the script that produces that list.
