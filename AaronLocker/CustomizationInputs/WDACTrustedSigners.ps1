@@ -105,7 +105,7 @@ exemplar = $env:USERPROFILE+"\AppData\Local\GitHubDesktop\GitHubDesktop.exe";
 # Trust Update.exe signed by the publisher of Microsoft Teams.
 label = "Trust Update.exe signed by the publisher of Microsoft Teams";
 exemplar = $env:USERPROFILE+"\AppData\Local\Microsoft\Teams\Update.exe";
-level = "Publisher";
+level = "FilePublisher";
 useProduct = $true;
 }
 

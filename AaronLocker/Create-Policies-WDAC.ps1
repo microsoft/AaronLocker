@@ -47,27 +47,6 @@ $WDACPathsToAllow | foreach {
 Write-Host "Creating rules for trusted publishers..." -ForegroundColor Cyan
 # $node=$WDACBaseXML.SelectSingleNode("//si:Signers",$nsBase)
 
-<# Define an empty AppLocker policy to fill, with a blank publisher rule to use as a template.
-$signerPolXml = [xml]@"
-    <AppLockerPolicy Version="1">
-      <RuleCollection Type="Exe" EnforcementMode="NotConfigured">
-        <FilePublisherRule Id="" Name="" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
-          <Conditions>
-            <FilePublisherCondition PublisherName="" ProductName="*" BinaryName="*">
-              <BinaryVersionRange LowSection="*" HighSection="*" />
-            </FilePublisherCondition>
-          </Conditions>
-        </FilePublisherRule>
-      </RuleCollection>
-      <RuleCollection Type="Dll" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Script" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Msi" EnforcementMode="NotConfigured"/>
-    </AppLockerPolicy>
-"@
-# Get the blank publisher rule. It will be cloned to make the real publisher rules, and then this blank will be deleted.
-$fprTemplate = $signerPolXml.DocumentElement.SelectNodes("//FilePublisherRule")[0]
-#>
-
 # Run the script that produces the signer information to process. Should come in as a sequence of hashtables.
 # Each hashtable must have a label, and either an exemplar or a publisher.
 # $fprRulesEmpty: Don't generate TrustedSigners.xml if it doesn't have any rules.
@@ -83,60 +62,54 @@ $WDACsignersToBuildRulesFor | foreach {
     else
     {
         $IssuerName = $IssuerTBSHash = $publisher = $product = $filename = $fileVersion = $exemplarFile = ""
+        $level = $_.level
         $good = $false
-        # Exemplar is a file signed by the PCACertificate or publisher we want to trust. If the hashtable specifies "useProduct" = $true,
+        # Exemplar is a file whose signature/signed attributes match what we want to trust. If the hashtable specifies "useProduct" = $true,
         # the WDAC rule allows anything signed by that publisher with the same ProductName.
         if ($_.exemplar)
         {
-            $label = $label.Replace(" ","_")
             # Get count of $WDACAllowRules before adding new exemplar rule(s)
             $CurRuleCount = $WDACAllowRules.Count
 
             # Generate new rules from exemplar
             $exemplarFile = $_.exemplar
-            $level = $_.level
-            if ($level -eq $null) {$level = "Publisher"}
-            $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $exemplarFile -Level $level
-            # Determine how many new allow rules were added. This will be used to set Name to match the label and/or add ProductName restriction.
-            $NumRulesAdded = ($WDACAllowRules.Count - $CurRuleCount)
-            
-            # Set the name for each added rule to the $label specified 
-            $i=1
-            While ($i -le $NumRulesAdded)
+            if ((Test-Path($exemplarFile)))
             {
-                $WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label
-                $i++
-            }
-
-            if ($_.useProduct -and ($level -in "SignedVersion","Publisher","FilePublisher")) 
-            {
-                $alfi = Get-AppLockerFileInformation $exemplarFile
-                if ($alfi -eq $null)
+                if ($_.useProduct) 
                 {
-                    Write-Warning -Message ("Cannot get AppLockerFileInformation for $exemplarFile")
-                }
-                elseif (!($alfi.Publisher.HasProductName))
-                {
-                    Write-Warning "Cannot get product name information for $exemplarFile"
-                }
-                else
-                {
-                    # Get ProductName.
-                    $product = $alfi.Publisher.ProductName
-                    <#
-                    # Reset counter and add ProductName restriction to all added rules
-                    $i=1
-                    While ($i -le $NumRulesAdded)
+                    $SpecificFileNameLevel = "ProductName"
+                    if (($_.level -eq $null) -or ($_.level -notin "FilePublisher","FileName"))
                     {
-                        $WDACAllowRules[-$i].attributes.Add("ProductName", $product)
-                        $i++      
+                        Write-Warning -Message ("useProduct can only be used when level is 'FilePublisher' or 'FileName'. Setting level to 'FilePublisher'");
+                        $level = "FilePublisher"
                     }
-                    #>
+                }
+                else 
+                {
+                    $SpecificFileNameLevel = "None"
+                }
+
+                if ($_.level -eq $null)            {
+                    $level = "Publisher"
+                }
+                Write-Host "Creating rules for $exemplarFile at Level $level and SpecificFileNameLevel $SpecificFileNameLevel..." -ForegroundColor Cyan
+
+                $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $exemplarFile -Level $level -SpecificFileNameLevel $SpecificFileNameLevel
+                # Determine how many new allow rules were added. This will be used to set Name to match the label and/or add ProductName restriction.
+                $NumRulesAdded = ($WDACAllowRules.Count - $CurRuleCount)
+
+                # Set the name for each added rule to the $label specified 
+                $i=1
+                While ($i -le $NumRulesAdded)
+                {
+                    $curTypeId = $WDACAllowRules[-$i].TypeId 
+                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.Replace(" ","_")}
+                    $i++
                 }
             }
-            elseif ($_.useProduct -and ($level -notin "SignedVersion","Publisher","FilePublisher"))
+            else
             {
-                Write-Warning "Specified scan Level does not support ProductName constraint for $exemplarFile"
+                Write-Warning -Message ("Exemplar file not found at $exemplarFile. Skipping...");
             }
         }
         else
@@ -240,10 +213,11 @@ if ($fprRulesNotEmpty)
 }
 #>
 
+Write-Host "Creating policy from trusted publisher rules..." -ForegroundColor Cyan
+
 New-CIPolicy -Rules $WDACAllowRules -FilePath $WDACAllowRulesXMLFile -UserPEs -MultiplePolicyFormat
 
-
-####################################################################################################
+<####################################################################################################
 # Create block policy from Exe files to blacklist if needed. Merge the deny rules with the allow all example policy.
 ####################################################################################################
 if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
@@ -259,6 +233,12 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
 
 
 <#
+$NewRuleXml = $node."
+    <Signer ID='ID_SIGNER_S_33_Trust_the_publisher_of_GitHub_Desktop' Name='DigiCert SHA2 Assured ID Code Signing CA'>
+      <CertRoot Type='TBS' Value='E767799478F64A34B3F53FF3BB9057FE1768F4AB178041B0DCC0FF1E210CBA65' />
+      <CertPublisher Value='GitHub, Inc.' />
+    </Signer>
+"
 ####################################################################################################
 # TODO (one day When WDAC adds exception support, allow AppLocker-style rules)
 # Note that WDAC, by-default, enforces a run-time check that the current directory does not grant write permissions to non-standard admin users.
@@ -512,4 +492,5 @@ if ($Excel)
 }
 
 # --------------------------------------------------------------------------------
+#>
 #>
