@@ -72,6 +72,9 @@ If this switch is specified, reports the names and "safety" of directories that 
 .PARAMETER Excel
 If this switch is specified, outputs to formatted Excel worksheet instead of to pipeline
 
+.PARAMETER GridView
+If this switch is specified, outputs to PowerShell GridView
+
 .PARAMETER FindNonDefaultRootDirs
 If this switch is specified, identifies non-standard directories in the %SystemDrive% root directory. These directories often contain LOB applications.
 This switch cannot be used with any other options
@@ -141,6 +144,10 @@ param(
     [parameter(ParameterSetName="SearchDirectories")]
     [switch]
     $Excel = $false,
+
+    [parameter(ParameterSetName="SearchDirectories")]
+    [switch]
+    $GridView = $false,
 
     [parameter(ParameterSetName="NonDefaultRootDirs")]
     [switch]
@@ -517,6 +524,10 @@ if ($Excel)
     Remove-Item $tempfile
 
     $OutputEncoding = $OutputEncodingPrevious
+}
+elseif ($GridView)
+{
+    $csv | ConvertFrom-Csv -Delimiter "`t" | Out-GridView -Title $MyInvocation.MyCommand.Name
 }
 else
 {

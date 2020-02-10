@@ -122,6 +122,12 @@ BinaryName = "AEINV.DLL";
     @{
     label = "Google Chrome Cleanup";
     RuleCollection = "Dll";
+    PublisherName = "O=ESET, SPOL. S R.O., L=BRATISLAVA, C=SK";
+    ProductName = "CHROME CLEANUP";
+    }
+    @{
+    label = "Google Chrome Cleanup";
+    RuleCollection = "Dll";
     PublisherName = "O=ESET, SPOL. S R.O., L=BRATISLAVA, S=SLOVAKIA, C=SK";
     ProductName = "CHROME CLEANUP";
     }

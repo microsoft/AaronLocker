@@ -112,6 +112,9 @@ By default, this script outputs a single artificial "empty" event line for every
 .PARAMETER Excel
 If this optional switch is specified, outputs to a formatted Excel rather than tab-delimited CSV text to the pipeline.
 
+.PARAMETER GridView
+If this optional switch is specified, outputs to a PowerShell GridView.
+
 .PARAMETER Objects
 If this optional switch is specified, outputs PSCustomObjects rather than tab-delimited CSV. (Passes CSV through ConvertFrom-Csv.)
 This switch is ignored if -Excel is also specified.
@@ -224,6 +227,10 @@ param(
     # Output to Excel
     [switch]
     $Excel,
+
+    # Output to GridView
+    [switch]
+    $GridView,
 
     # Output PSCustomObjects
     [switch]
@@ -700,7 +707,11 @@ $oLines = @(
                     -replace $RoamingAppDataPattern, "%APPDATA%\")      `
                     -replace $UserProfilePattern,    "%USERPROFILE%\")
                 $gendir = [System.IO.Path]::GetDirectoryName($genpath)
-                if ($gendir.StartsWith("%PUBLIC%"))
+                if ($gendir.Length -eq 0)
+                {
+                    $location = "";
+                }
+                elseif ($gendir.StartsWith("%PUBLIC%"))
                 {
                     $location = "Public profile"
                 }
@@ -716,7 +727,7 @@ $oLines = @(
                 {
                     $location = "Hot/Removable"
                 }
-                elseif ($gendir.StartsWith("\\") -or ($genPath.Substring(1, 2) -eq ":\"))
+                elseif ($gendir.StartsWith("\\") -or ($genPath.Length -ge 3 -and $genPath.Substring(1, 2) -eq ":\"))
                 {
                     $location = "Drive/UNC"
                 }
@@ -814,6 +825,10 @@ if ($Excel)
         AddWorksheetFromCsvData -csv $csv -tabname "AppLocker events"
         ReleaseExcelApplication
     }
+}
+elseif ($GridView)
+{
+    $csv | ConvertFrom-Csv -Delimiter "`t" | Out-GridView -Title $MyInvocation.MyCommand.Name
 }
 elseif ($Objects)
 {
