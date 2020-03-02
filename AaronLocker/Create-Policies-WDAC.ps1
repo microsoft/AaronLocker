@@ -15,11 +15,15 @@ Create-Policies-WDAC.ps1 is called by Create-Policies.ps1 to generate comprehens
 # Initialize XML template variables used only by this script (see Config.ps1 for global variables used by AaronLocker)
 ####################################################################################################
 [xml]$WDACBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml"
+
 $WDACAllowRulesXMLFile = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "AllowRules.xml"))
 [xml]$WDACTemplateXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DenyAllAudit.xml"
+$nsuri = "urn:schemas-microsoft-com:sipolicy"
 $nsBase = new-object Xml.XmlNamespaceManager $WDACTemplateXML.NameTable
-$nsBase.AddNamespace("si", "urn:schemas-microsoft-com:sipolicy")
+$nsBase.AddNamespace("si", $nsuri)
+
 [xml]$WDACDenyBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml"
+
 
 ####################################################################################################
 # Build WDAC Allow rules policy (Deny rules will be in separate policy created later in this script)
@@ -28,10 +32,23 @@ $nsBase.AddNamespace("si", "urn:schemas-microsoft-com:sipolicy")
 # Delete previous set of dynamically-generated rules first
 Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "WDAC*.xml"))
 
+<#
+####################################################################################################
+# TODO (one day When WDAC adds exception support, allow AppLocker-style rules)
+# Note that WDAC, by-default, enforces a run-time check that the current directory does not grant write permissions to non-standard admin users.
+# However, the runtime check by WDAC is not a security feature in Windows and won't prevent a malicious user from altering the ACLs to make a previously
+# user-writable path pass the admin-only check after the fact. 
+####################################################################################################
+# Process exceptions for user-writable paths when a custom admin exists
+
+# Then implement logic similar to AppLocker for the rest to build exceptions for user-writable paths. The following is the current relevant code from AppLocker rule sections:
+#>
+
 # --------------------------------------------------------------------------------
 # Build WDAC allow rules starting with base Windows works example policy
 # Add Windir, PF, and PFx86 to $PathsToAllow then create allow rule policy
 # WDAC does not work with system variables for Program Files, so rules will be based on the values for the machine where the scan runs.
+# --------------------------------------------------------------------------------
 $WDACPathsToAllow = @($PathsToAllow)
 $WDACPathsToAllow += "%windir%\*"
 $WDACPathsToAllow += $env:ProgramFiles+"\*"
@@ -44,13 +61,14 @@ $WDACPathsToAllow | foreach {
 
 # --------------------------------------------------------------------------------
 # Create rules for trusted publishers
+# --------------------------------------------------------------------------------
 Write-Host "Creating rules for trusted publishers..." -ForegroundColor Cyan
-# $node=$WDACBaseXML.SelectSingleNode("//si:Signers",$nsBase)
 
 # Run the script that produces the signer information to process. Should come in as a sequence of hashtables.
 # Each hashtable must have a label, and either an exemplar or a publisher.
-# $fprRulesEmpty: Don't generate TrustedSigners.xml if it doesn't have any rules.
-$fprRulesEmpty = $true
+$FileRulesNode = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:FileRules",$nsBase)
+$SignersNode = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:Signers",$nsBase)
+$CustomRuleCount = 0
 $WDACsignersToBuildRulesFor = (& $ps1_TrustedSignersWDAC)
 $WDACsignersToBuildRulesFor | foreach {
     $label = $_.label
@@ -63,7 +81,6 @@ $WDACsignersToBuildRulesFor | foreach {
     {
         $IssuerName = $IssuerTBSHash = $publisher = $product = $filename = $fileVersion = $exemplarFile = ""
         $level = $_.level
-        $good = $false
         # Exemplar is a file whose signature/signed attributes match what we want to trust. If the hashtable specifies "useProduct" = $true,
         # the WDAC rule allows anything signed by that publisher with the same ProductName.
         if ($_.exemplar)
@@ -123,101 +140,251 @@ $WDACsignersToBuildRulesFor | foreach {
             $fileVersion = $_.FileVersion
             if (($null -ne $IssuerName) -and ($null -ne $IssuerTBSHash))
             {
-                $good = $true
+                $CustomRuleCount = $CustomRuleCount+1
+                $FileAttribId = $null
+                # --------------------------------------------------------------------------------
+                # Add a new FileAttrib if any of ProductName, FileName, or FileVersion is present
+                if (($null -ne $product) -or ($null -ne $filename) -or ($null -ne $fileVersion))
+                {
+                    $newFileAttrib = $WDACTemplateXML.CreateElement("FileAttrib",$nsuri)
+                    $FileAttribId = "ID_FILEATTRIB_F_"+$CustomRuleCount
+                    $newFileAttrib.SetAttribute("ID",$FileAttribId)
+                    $newFileAttrib.SetAttribute("FriendlyName",$label)
+                    if ($null -ne $product) {$newFileAttrib.SetAttribute("ProductName",$product)}
+                    if ($null -ne $filename) {$newFileAttrib.SetAttribute("FileName",$filename)}
+                    if ($null -ne $fileVersion) {$newFileAttrib.SetAttribute("MinimumFileVersion",$fileVersion)}
+
+                    $FileRulesNode.AppendChild($newFileAttrib)
+                }
+
+                # --------------------------------------------------------------------------------
+                # Build out the XML for the new Signer rule starting with the PCA certificate info
+                $newSigner = $WDACTemplateXML.CreateElement("Signer",$nsuri)
+                $SignerId = "ID_SIGNER_S_"+$CustomRuleCount+"_"+$label.Replace(" ","_")
+
+                $newSigner.SetAttribute("ID",$SignerId)
+                $newSigner.SetAttribute("Name",$IssuerName)
+
+                $CertRootNode = $WDACTemplateXML.CreateElement("CertRoot",$nsuri) 
+                $CertRootNode.SetAttribute("Type","TBS")
+                $CertRootNode.SetAttribute("Value",$IssuerTBSHash)
+
+                $newSigner.AppendChild($CertRootNode)
+
+                # Add Publisher if present
+                if ($null -ne $publisher) 
+                {
+                    $PubNode = $WDACTemplateXML.CreateElement("CertPublisher",$nsuri)
+                    $PubNode.SetAttribute("Value",$publisher)
+                    $newSigner.AppendChild($PubNode)
+                }
+
+                # Add reference to FileAttrib rule if any of ProductName, FileName, or FileVersion is present
+                if ($null -ne $FileAttribId)
+                {
+                    $FileAttribRefNode = $WDACTemplateXML.CreateElement("FileAttribRef",$nsuri)
+                    $FileAttribRefNode.SetAttribute("RuleId",$FileAttribId)
+                    $newSigner.AppendChild($FileAttribRefNode)
+                }
+                $SignersNode.AppendChild($newSigner)
+
+                # Add AllowedSigners node under signing scenario 12 (user mode) if it doesn't exist
+                if ($WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:AllowedSigners",$nsBase) -eq $null)
+                {
+                    $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners",$nsBase).AppendChild($WDACTemplateXML.CreateElement("AllowedSigners",$nsuri))
+                }
+
+                # Add signer rule to User mode rules
+                $UserModeSigners = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:AllowedSigners",$nsBase)
+                $AllowedSignerRuleNode = $WDACTemplateXML.CreateElement("AllowedSigner",$nsuri)
+                $AllowedSignerRuleNode.SetAttribute("SignerId",$SignerId)
+                $UserModeSigners.AppendChild($AllowedSignerRuleNode)
+
+                # Add signer rule to CISigners rules
+                $CISigners = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:CiSigners",$nsBase)
+                $CISignersRuleNode = $WDACTemplateXML.CreateElement("CiSigner",$nsuri)
+                $CISignersRuleNode.SetAttribute("SignerId",$SignerId)
+                $CISigners.AppendChild($CISignersRuleNode)
             }
             else
             {
                 # Object isn't a hashtable, or doesn't have either exemplar or PCACertificate information.
                 Write-Warning -Message ("Invalid syntax in $ps1_TrustedSignersWDAC")
             }
-
-<#
-            if ($good)
-            {
-                $fprRulesNotEmpty = $true
-
-                # Duplicate the blank publisher rule, and populate it with information gathered.
-                $fpr = $fprTemplate.Clone()
-                $fpr.Conditions.FilePublisherCondition.PublisherName = $publisher
-
-                $fpr.Name = "$label`: Signer rule for $publisher"
-                if ($product.Length -gt 0)
-                {
-                    $fpr.Conditions.FilePublisherCondition.ProductName = $product
-                    $fpr.Name = "$label`: Signer/product rule for $publisher/$product"
-                    if ($filename.Length -gt 0)
-                    {
-                        $fpr.Conditions.FilePublisherCondition.BinaryName = $filename
-                        $fpr.Name = "$label`: Signer/product/file rule for $publisher/$product/$filename"
-                        if ($fileVersion.Length -gt 0)
-                        {
-                            $fpr.Conditions.FilePublisherCondition.BinaryVersionRange.LowSection = $fileVersion
-                        }
-                    }
-                }
-                if ($exemplarFile.Length -gt 0)
-                {
-                    $fpr.Description = "Information acquired from $exemplarFile"
-                }
-                else
-                {
-                    $fpr.Description = "Information acquired from $fname_TrustedSigners"
-                }
-                Write-Host ("`t" + $fpr.Name) -ForegroundColor Cyan
-
-                if ($publisher.ToLower().Contains("microsoft") -and $product.Length -eq 0 -and ($ruleCollection.Length -eq 0 -or $ruleCollection -eq "Exe"))
-                {
-                    Write-Warning -Message ("Warning: Trusting all Microsoft-signed files is an overly-broad whitelisting strategy")
-                }
-
-                if ($ruleCollection)
-                {
-                    $node = $signerPolXml.SelectSingleNode("//RuleCollection[@Type='" + $ruleCollection + "']")
-                    if ($node -eq $null)
-                    {[
-                        Write-Warning ("Couldn't find RuleCollection Type = " + $ruleCollection + " (RuleCollection is case-sensitive)")
-                    }
-                    else
-                    {
-                        $fpr.Id = [string]([GUID]::NewGuid().Guid)
-                        $node.AppendChild($fpr) | Out-Null
-                    }
-                }
-                else
-                {
-                    # Append a copy of the new publisher rule into each rule set with a different GUID in each.
-                    $signerPolXml.SelectNodes("//RuleCollection") | foreach {
-                        $fpr0 = $fpr.CloneNode($true)
-
-                        $fpr0.Id = [string]([GUID]::NewGuid().Guid)
-                        $_.AppendChild($fpr0) | Out-Null
-                    }
-                }
-            }
-#>
         }
-
     }
 }
 
-<# Don't generate the file if it doesn't contain any rules
-if ($fprRulesNotEmpty)
-{
-    # Delete the blank publisher rule from the rule set.
-    $fprTemplate.ParentNode.RemoveChild($fprTemplate) | Out-Null
+# --------------------------------------------------------------------------------
+# Create custom hash rules
+# --------------------------------------------------------------------------------
+Write-Host "Creating extra hash rules ..." -ForegroundColor Cyan
 
-    #$signerPolXml.OuterXml | clip
-    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "TrustedSigners.xml")
-    # Save XML as Unicode
-    SaveXmlDocAsUnicode -xmlDoc $signerPolXml -xmlFilename $outfile
+$hashRuleData | foreach {
+    $CustomRuleCount = $CustomRuleCount+1
+
+    $HashRuleName = $_.RuleName
+    $HashValue = $_.HashVal.Substring(2)
+    $FileName = $_.FileName
+    $FileHashAllowId = "ID_ALLOW_A_"+$CustomRuleCount+$FileName.Replace(" ","_")
+
+    $newFileAllow = $WDACTemplateXML.CreateElement("Allow",$nsuri)
+    $newFileAllow.SetAttribute("ID",$FileHashAllowId)
+    $newFileAllow.SetAttribute("FriendlyName",$HashRuleName)
+    $newFileAllow.SetAttribute("Hash", $HashValue)
+
+    $FileRulesNode.AppendChild($newFileAllow)
+
+    # Add FileRulesRef node under signing scenario 12 (user mode) if it doesn't exist
+    if ($WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:FileRulesRef",$nsBase) -eq $null)
+    {
+        $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners",$nsBase).AppendChild($WDACTemplateXML.CreateElement("FileRulesRef",$nsuri))
+    }
+
+    # Add FileAllow rule to User mode rules
+    $UserModeFileRules = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:FileRulesRef",$nsBase)
+    $AllowedFileRuleRefNode = $WDACTemplateXML.CreateElement("FileRuleRef",$nsuri)
+    $AllowedFileRuleRefNode.SetAttribute("RuleId",$FileHashAllowId)
+    $UserModeFileRules.AppendChild($AllowedFileRuleRefNode)
 }
-#>
 
-Write-Host "Creating policy from trusted publisher rules..." -ForegroundColor Cyan
+Write-Host "Saving policy XML for custom publisher and hash rules..." -ForegroundColor Cyan
+# Save XML as Unicode
+SaveXmlDocAsUnicode -xmlDoc $WDACTemplateXML -xmlFilename $WDACAllowRulesXMLFile
+Merge-CIPolicy -OutputFilePath $WDACAllowRulesXMLFile -PolicyPaths $WDACAllowRulesXMLFile -Rules $WDACAllowRules
 
-New-CIPolicy -Rules $WDACAllowRules -FilePath $WDACAllowRulesXMLFile -UserPEs -MultiplePolicyFormat
 
-<####################################################################################################
+# --------------------------------------------------------------------------------
+# Rules for files in user-writable directories
+# --------------------------------------------------------------------------------
+# Build rules for files in writable directories identified in the "unsafe paths to build rules for" script.
+# Uses BuildRulesForFilesInWritableDirectories.ps1.
+# Writes results to the dynamic merge-rules directory, using the script-supplied labels as part of the file name.
+# The files in the merge-rules directories will be merged into the main document later.
+# (Doing this after the other files are created in the MergeRulesDynamicDir - file naming logic handles cases where
+# file already exists from the other dynamically-generated files above, or if multiple items have the same label.
+
+$UnsafePathsToBuildRulesFor | foreach {
+    $label = $_.label
+    if ($ForUser)
+    {
+        $paths = RenamePaths -paths $_.paths -forUsername $ForUser
+    }
+    else
+    {
+        $paths = $_.paths
+    }
+    switch ($_.pubruleGranularity)
+    {
+        "pubOnly" 
+        { 
+            $level = "Publisher"
+            $SpecificFileNameLevel = "None"
+            $Fallback = "FilePublisher,FileName,Hash"
+        }
+        "pubProduct"
+        {
+            $level = "FilePublisher"
+            $SpecificFileNameLevel = "ProductName"
+            $Fallback = "FilePublisher,FileName,Hash"
+        }
+        "pubProductBinary"
+        {
+            $level = "FilePublisher"
+            $SpecificFileNameLevel = "OriginalFileName"
+            $Fallback = "FileName,Hash"
+        }
+        "pubProdBinVer"
+        {
+            $level = "FilePublisher"
+            $SpecificFileNameLevel = "OriginalFileName"
+            $Fallback = "FileName,Hash"
+        }
+        # This catch-all here in case the parameter ValidateSet attribute changes and this block doesn't...
+        default
+        {
+            Write-Error -Category InvalidArgument -Message "`nINVALID PubRuleGranularity: $PubRuleGranularity"
+            return
+        }
+    }
+
+    # Get count of $WDACAllowRules before adding new "unsafe" rule(s)
+    $CurRuleCount = $WDACAllowRules.Count
+
+    # Generate new rules for each specified path
+    foreach ($CurPath in $paths)
+    {
+        # E.g., in case of blank lines in input file
+        $CurPath = $CurPath.Trim()
+        if ($CurPath.Length -gt 0)
+        {
+            if (Test-Path $CurPath)
+            {
+                # Determine whether directory or file
+                $PathInfo = Get-Item $CurPath -Force
+                if ($PathInfo -is [System.IO.DirectoryInfo])
+                {
+        $exemplarFile = $_.exemplar
+            if ((Test-Path($exemplarFile)))
+            {
+                if ($_.useProduct) 
+                {
+                    $SpecificFileNameLevel = "ProductName"
+                    if (($_.level -eq $null) -or ($_.level -notin "FilePublisher","FileName"))
+                    {
+                        Write-Warning -Message ("useProduct can only be used when level is 'FilePublisher' or 'FileName'. Setting level to 'FilePublisher'");
+                        $level = "FilePublisher"
+                    }
+                }
+                else 
+                {
+                    $SpecificFileNameLevel = "None"
+                }
+
+                if ($_.level -eq $null)            {
+                    $level = "Publisher"
+                }
+                Write-Host "Creating rules for $exemplarFile at Level $level and SpecificFileNameLevel $SpecificFileNameLevel..." -ForegroundColor Cyan
+
+                $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $exemplarFile -Level $level -SpecificFileNameLevel $SpecificFileNameLevel
+                # Determine how many new allow rules were added. This will be used to set Name to match the label and/or add ProductName restriction.
+                $NumRulesAdded = ($WDACAllowRules.Count - $CurRuleCount)
+
+                # Set the name for each added rule to the $label specified 
+                $i=1
+                While ($i -le $NumRulesAdded)
+                {
+                    $curTypeId = $WDACAllowRules[-$i].TypeId 
+                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.Replace(" ","_")}
+                    $i++
+                }
+            }
+            else
+            {
+                Write-Warning -Message ("Exemplar file not found at $exemplarFile. Skipping...");
+            }
+
+    $pubruleGranularity = "pubProductBinary"
+    $pubruleGranularity = $_.pubruleGranularity
+
+    $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Publisher Rules.xml")
+    $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Hash Rules.xml")
+    # If either already exists, create a pair of names that don't exist yet
+    # (Just assume that when the rules file doesn't exist that the hash rules file doesn't either)
+    $ixOutfile = [int]2
+    while ((Test-Path($outfilePub)) -or (Test-Path($outfileHash)))
+    {
+        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
+        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
+        $ixOutfile++
+    }
+    Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
+
+    & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -PubRuleGranularity $pubruleGranularity -RuleNamePrefix $label -OutputPubFileName $outfilePub -OutputHashFileName $outfileHash
+}
+
+
+###################################################################################################
 # Create block policy from Exe files to blacklist if needed. Merge the deny rules with the allow all example policy.
 ####################################################################################################
 if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
@@ -232,189 +399,7 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
 }
 
 
-<#
-$NewRuleXml = $node."
-    <Signer ID='ID_SIGNER_S_33_Trust_the_publisher_of_GitHub_Desktop' Name='DigiCert SHA2 Assured ID Code Signing CA'>
-      <CertRoot Type='TBS' Value='E767799478F64A34B3F53FF3BB9057FE1768F4AB178041B0DCC0FF1E210CBA65' />
-      <CertPublisher Value='GitHub, Inc.' />
-    </Signer>
-"
-####################################################################################################
-# TODO (one day When WDAC adds exception support, allow AppLocker-style rules)
-# Note that WDAC, by-default, enforces a run-time check that the current directory does not grant write permissions to non-standard admin users.
-# However, the runtime check by WDAC is not a security feature in Windows and won't prevent a malicious user from altering the ACLs to make a previously
-# user-writable path pass the admin-only check after the fact. 
-####################################################################################################
-# Process exceptions for user-writable paths when a custom admin exists
-
-# Then implement logic similar to AppLocker for the rest to build exceptions for user-writable paths. The following is the current relevant code from AppLocker rule sections:
-
-
-####################################################################################################
-# Create custom hash rules
-####################################################################################################
-Write-Host "Creating extra hash rules ..." -ForegroundColor Cyan
-
-# Define an empty AppLocker policy to fill, with a blank hash rule to use as a template.
-$hashRuleXml = [xml]@"
-    <AppLockerPolicy Version="1">
-      <RuleCollection Type="Exe" EnforcementMode="NotConfigured">
-        <FileHashRule Id="" Name="" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
-            <Conditions>
-              <FileHashCondition>
-                <FileHash Type="SHA256" Data="" SourceFileName="" SourceFileLength="0"/>
-              </FileHashCondition>
-            </Conditions>
-        </FileHashRule>
-      </RuleCollection>
-      <RuleCollection Type="Dll" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Script" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Msi" EnforcementMode="NotConfigured"/>
-    </AppLockerPolicy>
-"@
-# Get the blank hash rule. It will be cloned to make the real hash rules.
-$fhrTemplate = $hashRuleXml.DocumentElement.SelectNodes("//FileHashRule")[0]
-# Remove the template rule from the main document
-$fhrTemplate.ParentNode.RemoveChild($fhrTemplate) | Out-Null
-# fhrRulesNotEmpty: Don't generate ExtraHashRules.xml if it doesn't have any rules.
-$fhrRulesNotEmpty = $false
-
-# Run the script that produces the hash information to process. Should come in as a sequence of hashtables.
-# Each hashtable must have the following properties: 
-# * RuleCollection (case-sensitive)
-# * RuleName
-# * RuleDesc
-# * HashVal (must be SHA256 with "0x" and 64 hex digits)
-# * FileName
-$hashRuleData = (& $ps1_HashRuleData)
-
-$hashRuleData | foreach {
-
-    $fhr = $fhrTemplate.Clone()
-    $fhr.Id = [string]([GUID]::NewGuid().Guid)
-    $fhr.Name = $_.RuleName
-    $fhr.Description = $_.RuleDesc
-    $fhr.Conditions.FileHashCondition.FileHash.Data = $_.HashVal
-    $fhr.Conditions.FileHashCondition.FileHash.SourceFileName = $_.FileName
-
-    $node = $hashRuleXml.SelectSingleNode("//RuleCollection[@Type='" + $_.RuleCollection + "']")
-    if ($node -eq $null)
-    {
-        Write-Warning ("Couldn't find RuleCollection Type = " + $_.RuleCollection + " (RuleCollection is case-sensitive)")
-    }
-    else
-    {
-        $node.AppendChild($fhr) | Out-Null
-        $fhrRulesNotEmpty = $true
-    }
-}
-
-# Don't generate the file if it doesn't contain any rules
-if ($fhrRulesNotEmpty)
-{
-    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "ExtraHashRules.xml")
-    # Save XML as Unicode
-    SaveXmlDocAsUnicode -xmlDoc $hashRuleXml -xmlFilename $outfile
-}
-
-####################################################################################################
-# Rules for files in user-writable directories
-####################################################################################################
-
-# --------------------------------------------------------------------------------
-# Helper function used to replace current username with another in paths.
-function RenamePaths($paths, $forUsername)
-{
-    # Warning: if $forUsername is "Users" that will be a problem.
-    $forUsername = "\" + $forUsername
-    # Look for username bracketed by backslashes, or at end of the path.
-    $CurrentName      = "\" + $env:USERNAME.ToLower() + "\"
-    $CurrentNameFinal = "\" + $env:USERNAME.ToLower()
-
-    $paths | ForEach-Object {
-        $origTargetDir = $_
-        # Temporarily remove trailing \* if present; can't GetFullPath with that.
-        if ($origTargetDir.EndsWith("\*"))
-        {
-            $bAppend = "\*"
-            $targetDir = $origTargetDir.Substring(0, $origTargetDir.Length - 2)
-        }
-        else
-        {
-            $bAppend = ""
-            $targetDir = $origTargetDir
-        }
-        # GetFullPath in case the provided name is 8.3-shortened.
-        $targetDir = [System.IO.Path]::GetFullPath($targetDir).ToLower()
-        if ($targetDir.Contains($CurrentName) -or $targetDir.EndsWith($CurrentNameFinal))
-        {
-            $targetDir.Replace($CurrentNameFinal, $forUsername) + $bAppend
-        }
-        else
-        {
-            $origTargetDir
-        }
-    }
-}
-
-# --------------------------------------------------------------------------------
-# Build rules for files in writable directories identified in the "unsafe paths to build rules for" script.
-# Uses BuildRulesForFilesInWritableDirectories.ps1.
-# Writes results to the dynamic merge-rules directory, using the script-supplied labels as part of the file name.
-# The files in the merge-rules directories will be merged into the main document later.
-# (Doing this after the other files are created in the MergeRulesDynamicDir - file naming logic handles cases where
-# file already exists from the other dynamically-generated files above, or if multiple items have the same label.
-
-if ( !(Test-Path($ps1_UnsafePathsToBuildRulesFor)) )
-{
-    $errmsg = "Script file not found: $ps1_UnsafePathsToBuildRulesFor`nNo new rules generated for files in writable directories."
-    Write-Warning $errmsg
-}
-else
-{
-    Write-Host "Creating rules for files in writable directories..." -ForegroundColor Cyan
-    $UnsafePathsToBuildRulesFor = (& $ps1_UnsafePathsToBuildRulesFor)
-    $UnsafePathsToBuildRulesFor | foreach {
-        $label = $_.label
-        if ($ForUser)
-        {
-            $paths = RenamePaths -paths $_.paths -forUsername $ForUser
-        }
-        else
-        {
-            $paths = $_.paths
-        }
-        $recurse = $true;
-        if ($null -ne $_.noRecurse) { $recurse = !$_.noRecurse }
-        $pubruleGranularity = "pubProductBinary"
-        if ($null -ne $_.pubruleGranularity)
-        {
-            $pubruleGranularity = $_.pubruleGranularity
-        }
-        elseif ($null -ne $_.enforceMinVersion) # enforceMinVersion not considered if pubruleGranularity explicitly specified
-        {
-            if ($_.enforceMinVersion)
-            {
-                $pubruleGranularity = "pubProdBinVer";
-            }
-        }
-        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Publisher Rules.xml")
-        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Hash Rules.xml")
-        # If either already exists, create a pair of names that don't exist yet
-        # (Just assume that when the rules file doesn't exist that the hash rules file doesn't either)
-        $ixOutfile = [int]2
-        while ((Test-Path($outfilePub)) -or (Test-Path($outfileHash)))
-        {
-            $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
-            $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
-            $ixOutfile++
-        }
-        Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
-        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -PubRuleGranularity $pubruleGranularity -RuleNamePrefix $label -OutputPubFileName $outfilePub -OutputHashFileName $outfileHash
-    }
-}
-
-####################################################################################################
+<####################################################################################################
 # Tag with timestamp into the rule set
 ####################################################################################################
 
@@ -492,5 +477,4 @@ if ($Excel)
 }
 
 # --------------------------------------------------------------------------------
-#>
 #>

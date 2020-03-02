@@ -415,15 +415,6 @@ $fhrTemplate.ParentNode.RemoveChild($fhrTemplate) | Out-Null
 # fhrRulesNotEmpty: Don't generate ExtraHashRules.xml if it doesn't have any rules.
 $fhrRulesNotEmpty = $false
 
-# Run the script that produces the hash information to process. Should come in as a sequence of hashtables.
-# Each hashtable must have the following properties: 
-# * RuleCollection (case-sensitive)
-# * RuleName
-# * RuleDesc
-# * HashVal (must be SHA256 with "0x" and 64 hex digits)
-# * FileName
-$hashRuleData = (& $ps1_HashRuleData)
-
 $hashRuleData | foreach {
 
     $fhr = $fhrTemplate.Clone()
@@ -458,42 +449,6 @@ if ($fhrRulesNotEmpty)
 ####################################################################################################
 
 # --------------------------------------------------------------------------------
-# Helper function used to replace current username with another in paths.
-function RenamePaths($paths, $forUsername)
-{
-    # Warning: if $forUsername is "Users" that will be a problem.
-    $forUsername = "\" + $forUsername
-    # Look for username bracketed by backslashes, or at end of the path.
-    $CurrentName      = "\" + $env:USERNAME.ToLower() + "\"
-    $CurrentNameFinal = "\" + $env:USERNAME.ToLower()
-
-    $paths | ForEach-Object {
-        $origTargetDir = $_
-        # Temporarily remove trailing \* if present; can't GetFullPath with that.
-        if ($origTargetDir.EndsWith("\*"))
-        {
-            $bAppend = "\*"
-            $targetDir = $origTargetDir.Substring(0, $origTargetDir.Length - 2)
-        }
-        else
-        {
-            $bAppend = ""
-            $targetDir = $origTargetDir
-        }
-        # GetFullPath in case the provided name is 8.3-shortened.
-        $targetDir = [System.IO.Path]::GetFullPath($targetDir).ToLower()
-        if ($targetDir.Contains($CurrentName) -or $targetDir.EndsWith($CurrentNameFinal))
-        {
-            $targetDir.Replace($CurrentNameFinal, $forUsername) + $bAppend
-        }
-        else
-        {
-            $origTargetDir
-        }
-    }
-}
-
-# --------------------------------------------------------------------------------
 # Build rules for files in writable directories identified in the "unsafe paths to build rules for" script.
 # Uses BuildRulesForFilesInWritableDirectories.ps1.
 # Writes results to the dynamic merge-rules directory, using the script-supplied labels as part of the file name.
@@ -501,54 +456,45 @@ function RenamePaths($paths, $forUsername)
 # (Doing this after the other files are created in the MergeRulesDynamicDir - file naming logic handles cases where
 # file already exists from the other dynamically-generated files above, or if multiple items have the same label.
 
-if ( !(Test-Path($ps1_UnsafePathsToBuildRulesFor)) )
-{
-    $errmsg = "Script file not found: $ps1_UnsafePathsToBuildRulesFor`nNo new rules generated for files in writable directories."
-    Write-Warning $errmsg
-}
-else
-{
-    Write-Host "Creating rules for files in writable directories..." -ForegroundColor Cyan
-    $UnsafePathsToBuildRulesFor = (& $ps1_UnsafePathsToBuildRulesFor)
-    $UnsafePathsToBuildRulesFor | foreach {
-        $label = $_.label
-        if ($ForUser)
-        {
-            $paths = RenamePaths -paths $_.paths -forUsername $ForUser
-        }
-        else
-        {
-            $paths = $_.paths
-        }
-        $recurse = $true;
-        if ($null -ne $_.noRecurse) { $recurse = !$_.noRecurse }
-        $pubruleGranularity = "pubProductBinary"
-        if ($null -ne $_.pubruleGranularity)
-        {
-            $pubruleGranularity = $_.pubruleGranularity
-        }
-        elseif ($null -ne $_.enforceMinVersion) # enforceMinVersion not considered if pubruleGranularity explicitly specified
-        {
-            if ($_.enforceMinVersion)
-            {
-                $pubruleGranularity = "pubProdBinVer";
-            }
-        }
-        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Publisher Rules.xml")
-        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Hash Rules.xml")
-        # If either already exists, create a pair of names that don't exist yet
-        # (Just assume that when the rules file doesn't exist that the hash rules file doesn't either)
-        $ixOutfile = [int]2
-        while ((Test-Path($outfilePub)) -or (Test-Path($outfileHash)))
-        {
-            $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
-            $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
-            $ixOutfile++
-        }
-        Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
-        & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -PubRuleGranularity $pubruleGranularity -RuleNamePrefix $label -OutputPubFileName $outfilePub -OutputHashFileName $outfileHash
+$UnsafePathsToBuildRulesFor | foreach {
+    $label = $_.label
+    if ($ForUser)
+    {
+        $paths = RenamePaths -paths $_.paths -forUsername $ForUser
     }
+    else
+    {
+        $paths = $_.paths
+    }
+    $recurse = $true;
+    if ($null -ne $_.noRecurse) { $recurse = !$_.noRecurse }
+    $pubruleGranularity = "pubProductBinary"
+    if ($null -ne $_.pubruleGranularity)
+    {
+        $pubruleGranularity = $_.pubruleGranularity
+    }
+    elseif ($null -ne $_.enforceMinVersion) # enforceMinVersion not considered if pubruleGranularity explicitly specified
+    {
+        if ($_.enforceMinVersion)
+        {
+            $pubruleGranularity = "pubProdBinVer";
+        }
+    }
+    $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Publisher Rules.xml")
+    $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Hash Rules.xml")
+    # If either already exists, create a pair of names that don't exist yet
+    # (Just assume that when the rules file doesn't exist that the hash rules file doesn't either)
+    $ixOutfile = [int]2
+    while ((Test-Path($outfilePub)) -or (Test-Path($outfileHash)))
+    {
+        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
+        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
+        $ixOutfile++
+    }
+    Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
+    & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -PubRuleGranularity $pubruleGranularity -RuleNamePrefix $label -OutputPubFileName $outfilePub -OutputHashFileName $outfileHash
 }
+
 
 ####################################################################################################
 # Tag with timestamp into the rule set

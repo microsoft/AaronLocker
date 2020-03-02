@@ -347,6 +347,28 @@ $PathsToAllow | foreach {
     }
 }
 
+# Run the script that gets "unsafe" user-writable paths for later processing. Should come in as a sequence of hashtables.
+if ( !(Test-Path($ps1_UnsafePathsToBuildRulesFor)) )
+{
+    $errmsg = "Script file not found: $ps1_UnsafePathsToBuildRulesFor`nNo new rules generated for files in writable directories."
+    Write-Warning $errmsg
+}
+else
+{
+    Write-Host "Get 'unsafe' user-writable paths for later processing..." -ForegroundColor Cyan
+    $UnsafePathsToBuildRulesFor = (& $ps1_UnsafePathsToBuildRulesFor)
+}
+
+# Run the script that produces the hash information to build additional allow rules. Should come in as a sequence of hashtables.
+# Each hashtable must have the following properties: 
+# * RuleName
+# * HashVal (must be SHA256 with "0x" and 64 hex digits)
+# * FileName
+# The following AppLocker-specific hashtable properties are ignored for WDAC rules 
+# * RuleCollection (case-sensitive)
+# * RuleDesc
+$hashRuleData = (& $ps1_HashRuleData)
+
 
 ####################################################################################################
 # Shared setup complete. Call AppLocker- and WDAC-specific scripts.
