@@ -248,12 +248,6 @@ $hashRuleData | foreach {
     $UserModeFileRules.AppendChild($AllowedFileRuleRefNode)
 }
 
-Write-Host "Saving policy XML for custom publisher and hash rules..." -ForegroundColor Cyan
-# Save XML as Unicode
-SaveXmlDocAsUnicode -xmlDoc $WDACTemplateXML -xmlFilename $WDACAllowRulesXMLFile
-Merge-CIPolicy -OutputFilePath $WDACAllowRulesXMLFile -PolicyPaths $WDACAllowRulesXMLFile -Rules $WDACAllowRules
-
-
 # --------------------------------------------------------------------------------
 # Rules for files in user-writable directories
 # --------------------------------------------------------------------------------
@@ -263,6 +257,7 @@ Merge-CIPolicy -OutputFilePath $WDACAllowRulesXMLFile -PolicyPaths $WDACAllowRul
 # The files in the merge-rules directories will be merged into the main document later.
 # (Doing this after the other files are created in the MergeRulesDynamicDir - file naming logic handles cases where
 # file already exists from the other dynamically-generated files above, or if multiple items have the same label.
+Write-Host "Creating rules for files in 'unsafe' paths..." -ForegroundColor Cyan
 
 $UnsafePathsToBuildRulesFor | foreach {
     $label = $_.label
@@ -320,33 +315,22 @@ $UnsafePathsToBuildRulesFor | foreach {
         {
             if (Test-Path $CurPath)
             {
-                # Determine whether directory or file
+                Write-Host "Generating rules for specified path: $CurPath..." -ForegroundColor Cyan
+                # Determine whether directory or file and run new-cipolicyrule with the appropriate switches for path or single file
                 $PathInfo = Get-Item $CurPath -Force
                 if ($PathInfo -is [System.IO.DirectoryInfo])
                 {
-        $exemplarFile = $_.exemplar
-            if ((Test-Path($exemplarFile)))
-            {
-                if ($_.useProduct) 
-                {
-                    $SpecificFileNameLevel = "ProductName"
-                    if (($_.level -eq $null) -or ($_.level -notin "FilePublisher","FileName"))
+                    $DriverFiles = Get-SystemDriver -ScanPath $CurPath -UserPEs
+                    if ($DriverFiles.Count > 0) 
                     {
-                        Write-Warning -Message ("useProduct can only be used when level is 'FilePublisher' or 'FileName'. Setting level to 'FilePublisher'");
-                        $level = "FilePublisher"
+                        $WDACAllowRules += & New-CIPolicyRule -DriverFiles $DriverFiles -Level $level -Fallback $Fallback -SpecificFileNameLevel $SpecificFileNameLevel
                     }
                 }
                 else 
                 {
-                    $SpecificFileNameLevel = "None"
+                    $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $CurPath -Level $level -Fallback $Fallback -SpecificFileNameLevel $SpecificFileNameLevel
                 }
 
-                if ($_.level -eq $null)            {
-                    $level = "Publisher"
-                }
-                Write-Host "Creating rules for $exemplarFile at Level $level and SpecificFileNameLevel $SpecificFileNameLevel..." -ForegroundColor Cyan
-
-                $WDACAllowRules += & New-CIPolicyRule -DriverFilePath $exemplarFile -Level $level -SpecificFileNameLevel $SpecificFileNameLevel
                 # Determine how many new allow rules were added. This will be used to set Name to match the label and/or add ProductName restriction.
                 $NumRulesAdded = ($WDACAllowRules.Count - $CurRuleCount)
 
@@ -361,27 +345,16 @@ $UnsafePathsToBuildRulesFor | foreach {
             }
             else
             {
-                Write-Warning -Message ("Exemplar file not found at $exemplarFile. Skipping...");
+                Write-Warning -Message ("Specified path not found: $CurPath. Skipping...");
             }
-
-    $pubruleGranularity = "pubProductBinary"
-    $pubruleGranularity = $_.pubruleGranularity
-
-    $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Publisher Rules.xml")
-    $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Hash Rules.xml")
-    # If either already exists, create a pair of names that don't exist yet
-    # (Just assume that when the rules file doesn't exist that the hash rules file doesn't either)
-    $ixOutfile = [int]2
-    while ((Test-Path($outfilePub)) -or (Test-Path($outfileHash)))
-    {
-        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
-        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
-        $ixOutfile++
+        }
     }
-    Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
-
-    & $ps1_BuildRulesForFilesInWritableDirectories -FileSystemPaths $paths -RecurseDirectories: $recurse -PubRuleGranularity $pubruleGranularity -RuleNamePrefix $label -OutputPubFileName $outfilePub -OutputHashFileName $outfileHash
 }
+
+Write-Host "Saving policy XML for custom publisher and hash rules..." -ForegroundColor Cyan
+# Save XML as Unicode
+SaveXmlDocAsUnicode -xmlDoc $WDACTemplateXML -xmlFilename $WDACAllowRulesXMLFile
+Merge-CIPolicy -OutputFilePath $WDACAllowRulesXMLFile -PolicyPaths $WDACAllowRulesXMLFile -Rules $WDACAllowRules
 
 
 ###################################################################################################
