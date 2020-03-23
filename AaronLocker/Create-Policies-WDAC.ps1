@@ -13,16 +13,19 @@ Create-Policies-WDAC.ps1 is called by Create-Policies.ps1 to generate comprehens
 
 ####################################################################################################
 # Initialize XML template variables used only by this script (see Config.ps1 for global variables used by AaronLocker)
+# It may be counterintuitive, but the Deny base policy used is the Windows template for "Allow All" and the Allow base policy
+# used is the Windows template for "Deny All". This is by design for these scripts.
 ####################################################################################################
 [xml]$WDACBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml"
+[xml]$WDACDenyBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml"
+[xml]$WDACAllowBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DenyAllAudit.xml"
 
 $WDACAllowRulesXMLFile = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "AllowRules.xml"))
-[xml]$WDACTemplateXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DenyAllAudit.xml"
+$WDACBlockPolicyXMLFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
 $nsuri = "urn:schemas-microsoft-com:sipolicy"
-$nsBase = new-object Xml.XmlNamespaceManager $WDACTemplateXML.NameTable
+$nsBase = new-object Xml.XmlNamespaceManager $WDACAllowBaseXML.NameTable
 $nsBase.AddNamespace("si", $nsuri)
 
-[xml]$WDACDenyBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml"
 
 
 ####################################################################################################
@@ -66,8 +69,8 @@ Write-Host "Creating rules for trusted publishers..." -ForegroundColor Cyan
 
 # Run the script that produces the signer information to process. Should come in as a sequence of hashtables.
 # Each hashtable must have a label, and either an exemplar or a publisher.
-$FileRulesNode = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:FileRules",$nsBase)
-$SignersNode = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:Signers",$nsBase)
+$FileRulesNode = $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:FileRules",$nsBase)
+$SignersNode = $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:Signers",$nsBase)
 $CustomRuleCount = 0
 $WDACsignersToBuildRulesFor = (& $ps1_TrustedSignersWDAC)
 $WDACsignersToBuildRulesFor | foreach {
@@ -146,7 +149,7 @@ $WDACsignersToBuildRulesFor | foreach {
                 # Add a new FileAttrib if any of ProductName, FileName, or FileVersion is present
                 if (($null -ne $product) -or ($null -ne $filename) -or ($null -ne $fileVersion))
                 {
-                    $newFileAttrib = $WDACTemplateXML.CreateElement("FileAttrib",$nsuri)
+                    $newFileAttrib = $WDACAllowBaseXML.CreateElement("FileAttrib",$nsuri)
                     $FileAttribId = "ID_FILEATTRIB_F_"+$CustomRuleCount
                     $newFileAttrib.SetAttribute("ID",$FileAttribId)
                     $newFileAttrib.SetAttribute("FriendlyName",$label)
@@ -159,13 +162,13 @@ $WDACsignersToBuildRulesFor | foreach {
 
                 # --------------------------------------------------------------------------------
                 # Build out the XML for the new Signer rule starting with the PCA certificate info
-                $newSigner = $WDACTemplateXML.CreateElement("Signer",$nsuri)
+                $newSigner = $WDACAllowBaseXML.CreateElement("Signer",$nsuri)
                 $SignerId = "ID_SIGNER_S_"+$CustomRuleCount+"_"+$label.Replace(" ","_")
 
                 $newSigner.SetAttribute("ID",$SignerId)
                 $newSigner.SetAttribute("Name",$IssuerName)
 
-                $CertRootNode = $WDACTemplateXML.CreateElement("CertRoot",$nsuri) 
+                $CertRootNode = $WDACAllowBaseXML.CreateElement("CertRoot",$nsuri) 
                 $CertRootNode.SetAttribute("Type","TBS")
                 $CertRootNode.SetAttribute("Value",$IssuerTBSHash)
 
@@ -174,7 +177,7 @@ $WDACsignersToBuildRulesFor | foreach {
                 # Add Publisher if present
                 if ($null -ne $publisher) 
                 {
-                    $PubNode = $WDACTemplateXML.CreateElement("CertPublisher",$nsuri)
+                    $PubNode = $WDACAllowBaseXML.CreateElement("CertPublisher",$nsuri)
                     $PubNode.SetAttribute("Value",$publisher)
                     $newSigner.AppendChild($PubNode)
                 }
@@ -182,27 +185,27 @@ $WDACsignersToBuildRulesFor | foreach {
                 # Add reference to FileAttrib rule if any of ProductName, FileName, or FileVersion is present
                 if ($null -ne $FileAttribId)
                 {
-                    $FileAttribRefNode = $WDACTemplateXML.CreateElement("FileAttribRef",$nsuri)
+                    $FileAttribRefNode = $WDACAllowBaseXML.CreateElement("FileAttribRef",$nsuri)
                     $FileAttribRefNode.SetAttribute("RuleId",$FileAttribId)
                     $newSigner.AppendChild($FileAttribRefNode)
                 }
                 $SignersNode.AppendChild($newSigner)
 
                 # Add AllowedSigners node under signing scenario 12 (user mode) if it doesn't exist
-                if ($WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:AllowedSigners",$nsBase) -eq $null)
+                if ($WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:AllowedSigners",$nsBase) -eq $null)
                 {
-                    $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners",$nsBase).AppendChild($WDACTemplateXML.CreateElement("AllowedSigners",$nsuri))
+                    $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners",$nsBase).AppendChild($WDACAllowBaseXML.CreateElement("AllowedSigners",$nsuri))
                 }
 
                 # Add signer rule to User mode rules
-                $UserModeSigners = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:AllowedSigners",$nsBase)
-                $AllowedSignerRuleNode = $WDACTemplateXML.CreateElement("AllowedSigner",$nsuri)
+                $UserModeSigners = $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:AllowedSigners",$nsBase)
+                $AllowedSignerRuleNode = $WDACAllowBaseXML.CreateElement("AllowedSigner",$nsuri)
                 $AllowedSignerRuleNode.SetAttribute("SignerId",$SignerId)
                 $UserModeSigners.AppendChild($AllowedSignerRuleNode)
 
                 # Add signer rule to CISigners rules
-                $CISigners = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:CiSigners",$nsBase)
-                $CISignersRuleNode = $WDACTemplateXML.CreateElement("CiSigner",$nsuri)
+                $CISigners = $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:CiSigners",$nsBase)
+                $CISignersRuleNode = $WDACAllowBaseXML.CreateElement("CiSigner",$nsuri)
                 $CISignersRuleNode.SetAttribute("SignerId",$SignerId)
                 $CISigners.AppendChild($CISignersRuleNode)
             }
@@ -228,7 +231,7 @@ $hashRuleData | foreach {
     $FileName = $_.FileName
     $FileHashAllowId = "ID_ALLOW_A_"+$CustomRuleCount+$FileName.Replace(" ","_")
 
-    $newFileAllow = $WDACTemplateXML.CreateElement("Allow",$nsuri)
+    $newFileAllow = $WDACAllowBaseXML.CreateElement("Allow",$nsuri)
     $newFileAllow.SetAttribute("ID",$FileHashAllowId)
     $newFileAllow.SetAttribute("FriendlyName",$HashRuleName)
     $newFileAllow.SetAttribute("Hash", $HashValue)
@@ -236,14 +239,14 @@ $hashRuleData | foreach {
     $FileRulesNode.AppendChild($newFileAllow)
 
     # Add FileRulesRef node under signing scenario 12 (user mode) if it doesn't exist
-    if ($WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:FileRulesRef",$nsBase) -eq $null)
+    if ($WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:FileRulesRef",$nsBase) -eq $null)
     {
-        $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners",$nsBase).AppendChild($WDACTemplateXML.CreateElement("FileRulesRef",$nsuri))
+        $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners",$nsBase).AppendChild($WDACAllowBaseXML.CreateElement("FileRulesRef",$nsuri))
     }
 
     # Add FileAllow rule to User mode rules
-    $UserModeFileRules = $WDACTemplateXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:FileRulesRef",$nsBase)
-    $AllowedFileRuleRefNode = $WDACTemplateXML.CreateElement("FileRuleRef",$nsuri)
+    $UserModeFileRules = $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:FileRulesRef",$nsBase)
+    $AllowedFileRuleRefNode = $WDACAllowBaseXML.CreateElement("FileRuleRef",$nsuri)
     $AllowedFileRuleRefNode.SetAttribute("RuleId",$FileHashAllowId)
     $UserModeFileRules.AppendChild($AllowedFileRuleRefNode)
 }
@@ -353,7 +356,7 @@ $UnsafePathsToBuildRulesFor | foreach {
 
 Write-Host "Saving policy XML for custom publisher and hash rules..." -ForegroundColor Cyan
 # Save XML as Unicode
-SaveXmlDocAsUnicode -xmlDoc $WDACTemplateXML -xmlFilename $WDACAllowRulesXMLFile
+SaveXmlDocAsUnicode -xmlDoc $WDACAllowBaseXML -xmlFilename $WDACAllowRulesXMLFile
 Merge-CIPolicy -OutputFilePath $WDACAllowRulesXMLFile -PolicyPaths $WDACAllowRulesXMLFile -Rules $WDACAllowRules
 
 
