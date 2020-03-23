@@ -80,10 +80,9 @@ Examples showing possible combinations:
     exemplar = "C:\Program Files\Utils\LuaBuglight.exe";
     useProduct = $true
     }
+
 #>
 
-
-<#
 @{
 # Allow Microsoft-signed files with the Microsoft Teams product name.
 label = "Microsoft Teams";
@@ -91,22 +90,6 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName = "MICROSOFT TEAMS";
-}
-#>
-
-@{
-# Trust everything signed with the GitHub Desktop publisher
-label = "Trust the publisher of GitHub Desktop";
-exemplar = $env:USERPROFILE+"\AppData\Local\GitHubDesktop\GitHubDesktop.exe";
-}
-
-
-@{
-# Trust Update.exe signed by the publisher of Microsoft Teams.
-label = "Trust Update.exe signed by the publisher of Microsoft Teams";
-exemplar = $env:USERPROFILE+"\AppData\Local\Microsoft\Teams\Update.exe";
-level = "FilePublisher";
-useProduct = $true;
 }
 
 # Uncomment this block if Google Chrome is installed to ProgramFiles.

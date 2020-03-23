@@ -27,7 +27,6 @@ $nsBase = new-object Xml.XmlNamespaceManager $WDACAllowBaseXML.NameTable
 $nsBase.AddNamespace("si", $nsuri)
 
 
-
 ####################################################################################################
 # Build WDAC Allow rules policy (Deny rules will be in separate policy created later in this script)
 ####################################################################################################
