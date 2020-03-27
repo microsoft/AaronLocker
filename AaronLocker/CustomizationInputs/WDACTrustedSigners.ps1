@@ -119,5 +119,5 @@ ProductName = "MICROSOFT TEAMS";
 #>
 
 # Allow MSVC/MFC redistributable DLLs. Dot-source the MSVC/MFC DLL include file in this directory
-# . ([System.IO.Path]::Combine( [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path), "TrustedSigners-MsvcMfc.ps1"))
+ . ([System.IO.Path]::Combine( [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path), "WDACTrustedSigners-MsvcMfc.ps1"))
 
