@@ -386,6 +386,7 @@ foreach ($CurPolicyType in "Allow","Deny")
         $CurAuditPolicyXMLFile = $WDACrulesFileAuditNew
         $CurEnforcedPolicyXMLFile = $WDACrulesFileEnforceNew
         $PreviousPolicyXMLFile = WDACRulesFileAuditLatest
+        $Exclusion = "*Deny*"
     }
     else
     {
@@ -393,6 +394,7 @@ foreach ($CurPolicyType in "Allow","Deny")
         $CurAuditPolicyXMLFile = $WDACDenyrulesFileAuditNew
         $CurEnforcedPolicyXMLFile = $WDACDenyrulesFileEnforceNew
         $PreviousPolicyXMLFile = WDACDenyRulesFileAuditLatest
+        $Exclusion = "*Allow*"
     }
 
     # Get the Policy ID and version from the previous WDAC policy (if it exists). Otherwise, set defaults.
@@ -409,45 +411,52 @@ foreach ($CurPolicyType in "Allow","Deny")
         $PolicyID = $null
     }
 
-    # Copy Base policy to Outputs folder and rename
+    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list"
+    
+    # Copy Base policy template to Outputs folder and rename
     cp $CurBaseXMLFile $CurAuditPolicyXMLFile
 
-    Write-Host "Merging custom allow rule sets with $WDACrulesFileAuditNew..." -ForegroundColor Cyan
+    Write-Host "Merging custom rule sets into new policy file..." -ForegroundColor Cyan
     # Merge any and all policy files found in the MergeRules directories, typically for authorized files in writable directories.
     # Some may have been created in the previous step; others might have been dropped in from other sources.
-    Get-ChildItem $mergeRulesDynamicDir\$WDACrulesFileBase*.xml, $mergeRulesStaticDir\$WDACrulesFileBase*.xml -Exclude *DENY* | foreach {
+    Get-ChildItem $mergeRulesDynamicDir\$WDACrulesFileBase*.xml, $mergeRulesStaticDir\$WDACrulesFileBase*.xml -Exclude $Exclusion | foreach {
         $policyFileToMerge = $_
         Write-Host ("`tMerging " + $_.Directory.Name + "\" + $_.Name) -ForegroundColor Cyan
-        Merge-CIPolicy -OutputFilePath $CurAuditPolicyXMLFile -PolicyPaths $CurAuditPolicyXMLFile,$policyFileToMerge -ErrorAction Stop
+        Merge-CIPolicy -OutputFilePath $CurAuditPolicyXMLFile -PolicyPaths $CurAuditPolicyXMLFile,$policyFileToMerge
     }
 
     # Set policy options for audit policy
     Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 12 # Enforce Store apps
-    if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13}
+    if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13} 
     if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14}
 
-    # Set policy name, version, and timestamp for the new policy file $WDACrulesFileAuditNew
-    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list - Audit"
-    Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName
+    # Set policy name, version, and timestamp for the new policy file
+    Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName + " - Audit"
     Set-CIPolicyVersion -FilePath $CurAuditPolicyXMLFile -Version $PolicyVersion
     Set-CIPolicySetting -FilePath $CurAuditPolicyXMLFile -Provider "PolicyInfo" -Key "Information" -ValueName "TimeStamp" -ValueType String -Value $strRuleDocTimestamp
 
-    #Set new policy ID to previous policy ID
-    [xml]$CurAuditPolicyXML = Get-Content -Path $CurAuditPolicyXMLFile
-    $CurAuditPolicyXML.SiPolicy.BasePolicyID = $PolicyID
-    $CurAuditPolicyXML.SiPolicy.PolicyID = $PolicyID
-    Write-Host "Saving $CurAuditPolicyXMLFile after setting PolicyID info from previous run..." -ForegroundColor Cyan
-    # Save XML as Unicode
-    SaveXmlDocAsUnicode -xmlDoc $CurAuditPolicyXML -xmlFilename $CurAuditPolicyXMLFile
+    #Set new policy ID to previous policy ID (if exists) or generate new ID
+    if ($PolicyID -ne $null)
+    {
+        [xml]$CurAuditPolicyXML = Get-Content -Path $CurAuditPolicyXMLFile
+        $CurAuditPolicyXML.SiPolicy.BasePolicyID = $PolicyID
+        $CurAuditPolicyXML.SiPolicy.PolicyID = $PolicyID
+        Write-Host "Saving $CurAuditPolicyXMLFile after setting PolicyID info from previous run..." -ForegroundColor Cyan
+        # Save XML as Unicode
+        SaveXmlDocAsUnicode -xmlDoc $CurAuditPolicyXML -xmlFilename $CurAuditPolicyXMLFile
+    }
+    else
+    {
+        Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -ResetPolicyID
+    }
 
     # Copy Audit policy to enforced
     cp $CurAuditPolicyXMLFile $CurEnforcedPolicyXMLFile
 
     # Update policy name for enforced policy
-    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list - Enforced"
-    Set-CIPolicyIdInfo -FilePath $CurEnforcedPolicyXMLFile -PolicyName $PolicyName
+    Set-CIPolicyIdInfo -FilePath $CurEnforcedPolicyXMLFile -PolicyName $PolicyName + " - Enforced"
 
-    #Set policy options for enforced policy 
+    # Remove audit mode option from enforced policy 
     Set-RuleOption -FilePath $CurEnforcedPolicyXMLFile -Option 3 -Delete # Turn off audit mode
 }
 
