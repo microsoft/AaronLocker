@@ -357,7 +357,7 @@ foreach($xPlaceholder in $xPlaceholders)
 ####################################################################################################
 
 # Delete previous set of dynamically-generated rules first
-Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "*.xml"))
+Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "*.xml")) -Exclude $WDACrulesFileBase*.*
 
 
 ####################################################################################################
@@ -522,7 +522,7 @@ if ($fprRulesNotEmpty)
     $fprTemplate.ParentNode.RemoveChild($fprTemplate) | Out-Null
 
     #$signerPolXml.OuterXml | clip
-    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "TrustedSigners.xml")
+    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $rulesFileBase+"TrustedSigners.xml")
     # Save XML as Unicode
     SaveXmlDocAsUnicode -xmlDoc $signerPolXml -xmlFilename $outfile
 }
@@ -580,7 +580,7 @@ $hashRuleData | foreach {
 # Don't generate the file if it doesn't contain any rules
 if ($fhrRulesNotEmpty)
 {
-    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "ExtraHashRules.xml")
+    $outfile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $rulesFileBase+"ExtraHashRules.xml")
     # Save XML as Unicode
     SaveXmlDocAsUnicode -xmlDoc $hashRuleXml -xmlFilename $outfile
 }
@@ -621,15 +621,15 @@ $UnsafePathsToBuildRulesFor | foreach {
             $pubruleGranularity = "pubProdBinVer";
         }
     }
-    $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Publisher Rules.xml")
-    $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " Hash Rules.xml")
+    $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $rulesFileBase + $label + " Publisher Rules.xml")
+    $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $rulesFileBase + $label + " Hash Rules.xml")
     # If either already exists, create a pair of names that don't exist yet
     # (Just assume that when the rules file doesn't exist that the hash rules file doesn't either)
     $ixOutfile = [int]2
     while ((Test-Path($outfilePub)) -or (Test-Path($outfileHash)))
     {
-        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
-        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
+        $outfilePub  = [System.IO.Path]::Combine($mergeRulesDynamicDir, $rulesFileBase + $label + " (" + $ixOutfile.ToString() + ") Publisher Rules.xml")
+        $outfileHash = [System.IO.Path]::Combine($mergeRulesDynamicDir, $rulesFileBase + $label + " (" + $ixOutfile.ToString() + ") Hash Rules.xml")
         $ixOutfile++
     }
     Write-Host ("Scanning $label`:", $paths) -Separator "`n`t" -ForegroundColor Cyan
@@ -659,7 +659,7 @@ $timestampXml = [xml]@"
     </AppLockerPolicy>
 "@
 
-$timestampFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "TimestampData.xml")
+$timestampFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $rulesFileBase + "TimestampData.xml")
 # Save XML as Unicode
 SaveXmlDocAsUnicode -xmlDoc $timestampXml -xmlFilename $timestampFile
 
@@ -674,7 +674,8 @@ $masterPolicy = [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.A
 Write-Host "Loading custom rule sets..." -ForegroundColor Cyan
 # Merge any and all policy files found in the MergeRules directories, typically for authorized files in writable directories.
 # Some may have been created in the previous step; others might have been dropped in from other sources.
-Get-ChildItem $mergeRulesDynamicDir\*.xml, $mergeRulesStaticDir\*.xml | foreach {
+# Excludes WDAC-specific files.
+Get-ChildItem $mergeRulesDynamicDir\*.xml, $mergeRulesStaticDir\*.xml -Exclude $WDACrulesFileBase*.* | foreach {
     $policyFileToMerge = $_
     Write-Host ("`tMerging " + $_.Directory.Name + "\" + $_.Name) -ForegroundColor Cyan
     $policyToMerge = [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.AppLockerPolicy]::Load($policyFileToMerge)
@@ -682,7 +683,7 @@ Get-ChildItem $mergeRulesDynamicDir\*.xml, $mergeRulesStaticDir\*.xml | foreach 
 }
 
 # Delete the timestamp file so that it never gets copied accidentally to the MergeRules-Static directory
-Remove-Item $timestampFile
+Remove-Item $timestampFile -Exclude $WDACrulesFileBase*.*
 
 #TODO: Optimize rules in rule collections here - combine/remove redundant/overlapping rules
 

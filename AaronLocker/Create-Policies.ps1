@@ -62,8 +62,13 @@ If specified, also creates Excel spreadsheets representing the generated rules.
 
 .PARAMETER AppLockerOrWDAC
 Specifies whether to generate policy for WDAC, AppLocker, or Both (default).
-#>
 
+.PARAMETER WDACTrustManagedInstallers
+Specifies whether to trust executables from managed installers(s) (default=true).
+
+.PARAMETER WDACTrustISG
+Specifies whether to trust executables deemed reputable by Microsoft's Intelligent Security Graph (ISG) (default=false).
+#>
 
 
 ####################################################################################################
@@ -87,7 +92,15 @@ param(
     # Specifies whether to create policies for WDAC only, AppLocker only, or Both (default)
     [ValidateSet("Both","AppLocker","WDAC")]
     [String]
-    $AppLockerOrWDAC = "Both"
+    $AppLockerOrWDAC = "Both",
+
+    # If set, enables managed installer(s) for WDAC
+	[switch]
+	$WDACTrustManagedInstallers = $true,
+
+    # If set, enables the option to trust reputable apps based on Microsoft's ISG
+	[switch]
+	$WDACTrustISG = $false
 )
 
 ####################################################################################################

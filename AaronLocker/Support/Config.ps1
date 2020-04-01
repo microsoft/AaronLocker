@@ -80,6 +80,8 @@ $rulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $
 $rulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileEnforceSuffix)
 $WDACrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + $rulesFileAuditSuffix)
 $WDACrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + $rulesFileEnforceSuffix)
+$WDACDenyrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "Deny" + $rulesFileAuditSuffix)
+$WDACDenyrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "Deny" + $rulesFileEnforceSuffix)
 # Get latest audit and enforce policy files, or $null if none found.
 function RulesFileAuditLatest()
 {
@@ -91,11 +93,19 @@ function RulesFileEnforceLatest()
 }
 function WDACRulesFileAuditLatest()
 {
-    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileAuditSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileAuditSuffix)) -Exclude *DENY* | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
 }
 function WDACRulesFileEnforceLatest()
 {
-    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileEnforceSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileEnforceSuffix)) -Exclude *DENY* | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACDenyRulesFileAuditLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*Deny" + $rulesFileAuditSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACDenyRulesFileEnforceLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*Deny" + $rulesFileEnforceSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
 }
 
 

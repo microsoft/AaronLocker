@@ -12,27 +12,27 @@ Create-Policies-WDAC.ps1 is called by Create-Policies.ps1 to generate comprehens
 #>
 
 ####################################################################################################
-# Initialize XML template variables used only by this script (see Config.ps1 for global variables used by AaronLocker)
+# Initialize variables used only by this script (see Config.ps1 for global variables used by AaronLocker)
 # It may be counterintuitive, but the Deny base policy used is the Windows template for "Allow All" and the Allow base policy
 # used is the Windows template for "Deny All". This is by design for these scripts.
 ####################################################################################################
-[xml]$WDACBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml"
-[xml]$WDACDenyBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml"
-[xml]$WDACAllowBaseXML = Get-Content -Path $env:windir"\schemas\CodeIntegrity\ExamplePolicies\DenyAllAudit.xml"
+$WDACBaseXMLFile = $env:windir+"\schemas\CodeIntegrity\ExamplePolicies\DefaultWindows_Audit.xml"
+$WDACDenyBaseXMLFile = $env:windir+"\schemas\CodeIntegrity\ExamplePolicies\AllowAll.xml"
+$WDACAllowBaseXMLFile = $env:windir+"\schemas\CodeIntegrity\ExamplePolicies\DenyAllAudit.xml"
 
 $WDACAllowRulesXMLFile = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "AllowRules.xml"))
 $WDACBlockPolicyXMLFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
-$nsuri = "urn:schemas-microsoft-com:sipolicy"
-$nsBase = new-object Xml.XmlNamespaceManager $WDACAllowBaseXML.NameTable
-$nsBase.AddNamespace("si", $nsuri)
 
+# Delete previous set of dynamically-generated rules first
+Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase+"*.xml"))
 
 ####################################################################################################
 # Build WDAC Allow rules policy (Deny rules will be in separate policy created later in this script)
 ####################################################################################################
-
-# Delete previous set of dynamically-generated rules first
-Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, "WDAC*.xml"))
+[xml]$WDACAllowBaseXML = Get-Content -Path $WDACAllowBaseXMLFile
+$nsuri = "urn:schemas-microsoft-com:sipolicy"
+$nsBase = new-object Xml.XmlNamespaceManager $WDACAllowBaseXML.NameTable
+$nsBase.AddNamespace("si", $nsuri)
 
 <#
 ####################################################################################################
@@ -374,82 +374,81 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
 }
 
 
-<####################################################################################################
-# Tag with timestamp into the rule set
 ####################################################################################################
-
-# Define an AppLocker policy to fill containing a bogus hash rule containing timestamp information; hash contains timestamp, as does name and description
-$timestampXml = [xml]@"
-    <AppLockerPolicy Version="1">
-      <RuleCollection Type="Exe" EnforcementMode="NotConfigured">
-        <FileHashRule Name="Rule set created $strRuleDocTimestamp" Description="Never-applicable rule to document that this AppLocker rule set was created via AaronLocker at $strRuleDocTimestamp" UserOrGroupSid="S-1-3-0" Action="Deny" Id="456bd77c-5528-4a93-8ab8-51c6b950c541">
-            <Conditions>
-              <FileHashCondition>
-                <FileHash Type="SHA256" Data="0x00000000000000000000000000000000000000000000000000$strTimestampForHashRule" SourceFileName="DateTimeInfo" SourceFileLength="1"/>
-              </FileHashCondition>
-            </Conditions>
-        </FileHashRule>
-      </RuleCollection>
-      <RuleCollection Type="Dll" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Script" EnforcementMode="NotConfigured"/>
-      <RuleCollection Type="Msi" EnforcementMode="NotConfigured"/>
-    </AppLockerPolicy>
-"@
-
-$timestampFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, "TimestampData.xml")
-# Save XML as Unicode
-SaveXmlDocAsUnicode -xmlDoc $timestampXml -xmlFilename $timestampFile
-
+# Build final policies by merging dynamic and static (if any) custom rules into WDAC template policy files
 ####################################################################################################
-# Merging custom rules
-####################################################################################################
+# Generate two versions of the Allow rules file and two versions of the Deny rules file: one with rules enforced, and one with auditing only for each.
+foreach ($CurPolicyType in "Allow","Deny")
+{
+    if ($CurPolicyType = "Allow")
+    {
+        $CurBaseXMLFile = $WDACBaseXMLFile
+        $CurAuditPolicyXMLFile = $WDACrulesFileAuditNew
+        $CurEnforcedPolicyXMLFile = $WDACrulesFileEnforceNew
+        $PreviousPolicyXMLFile = WDACRulesFileAuditLatest
+    }
+    else
+    {
+        $CurBaseXMLFile = $WDACDenyBaseXMLFile
+        $CurAuditPolicyXMLFile = $WDACDenyrulesFileAuditNew
+        $CurEnforcedPolicyXMLFile = $WDACDenyrulesFileEnforceNew
+        $PreviousPolicyXMLFile = WDACDenyRulesFileAuditLatest
+    }
+
+    # Get the Policy ID and version from the previous WDAC policy (if it exists). Otherwise, set defaults.
+    if ($PreviousPolicyXMLFile -ne $null)
+    {
+        [xml]$PreviousPolicyXML = Get-Content -Path $PreviousPolicyXMLFile
+        $PreviousPolicyVersion = [version]$PreviousPolicyXML.SiPolicy.VersionEx
+        $PolicyVersion = [version]::New($PreviousPolicyVersion.Major,$PreviousPolicyVersion.Minor,$PreviousPolicyVersion.Build,$PreviousPolicyVersion.Revision+1)
+        [string]$PolicyID = $PreviousPolicyXML.SiPolicy.PolicyID
+    }
+    else
+    {
+        $PolicyVersion = "1.0.0.0"
+        $PolicyID = $null
+    }
+
+    # Copy Base policy to Outputs folder and rename
+    cp $CurBaseXMLFile $CurAuditPolicyXMLFile
+
+    Write-Host "Merging custom allow rule sets with $WDACrulesFileAuditNew..." -ForegroundColor Cyan
+    # Merge any and all policy files found in the MergeRules directories, typically for authorized files in writable directories.
+    # Some may have been created in the previous step; others might have been dropped in from other sources.
+    Get-ChildItem $mergeRulesDynamicDir\$WDACrulesFileBase*.xml, $mergeRulesStaticDir\$WDACrulesFileBase*.xml -Exclude *DENY* | foreach {
+        $policyFileToMerge = $_
+        Write-Host ("`tMerging " + $_.Directory.Name + "\" + $_.Name) -ForegroundColor Cyan
+        Merge-CIPolicy -OutputFilePath $CurAuditPolicyXMLFile -PolicyPaths $CurAuditPolicyXMLFile,$policyFileToMerge -ErrorAction Stop
+    }
+
+    # Set policy options for audit policy
+    Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 12 # Enforce Store apps
+    if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13}
+    if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14}
+
+    # Set policy name, version, and timestamp for the new policy file $WDACrulesFileAuditNew
+    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list - Audit"
+    Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName
+    Set-CIPolicyVersion -FilePath $CurAuditPolicyXMLFile -Version $PolicyVersion
+    Set-CIPolicySetting -FilePath $CurAuditPolicyXMLFile -Provider "PolicyInfo" -Key "Information" -ValueName "TimeStamp" -ValueType String -Value $strRuleDocTimestamp
+
+    #Set new policy ID to previous policy ID
+    [xml]$CurAuditPolicyXML = Get-Content -Path $CurAuditPolicyXMLFile
+    $CurAuditPolicyXML.SiPolicy.BasePolicyID = $PolicyID
+    $CurAuditPolicyXML.SiPolicy.PolicyID = $PolicyID
+    Write-Host "Saving $CurAuditPolicyXMLFile after setting PolicyID info from previous run..." -ForegroundColor Cyan
+    # Save XML as Unicode
+    SaveXmlDocAsUnicode -xmlDoc $CurAuditPolicyXML -xmlFilename $CurAuditPolicyXMLFile
+
+    # Copy Audit policy to enforced
+    cp $CurAuditPolicyXMLFile $CurEnforcedPolicyXMLFile
+
+    # Update policy name for enforced policy
+    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list - Enforced"
+    Set-CIPolicyIdInfo -FilePath $CurEnforcedPolicyXMLFile -PolicyName $PolicyName
+
+    #Set policy options for enforced policy 
+    Set-RuleOption -FilePath $CurEnforcedPolicyXMLFile -Option 3 -Delete # Turn off audit mode
+}
 
 # --------------------------------------------------------------------------------
-# Load the XML document with modifications into an AppLockerPolicy object
-$masterPolicy = [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.AppLockerPolicy]::FromXml($xDocument.OuterXml)
-
-Write-Host "Loading custom rule sets..." -ForegroundColor Cyan
-# Merge any and all policy files found in the MergeRules directories, typically for authorized files in writable directories.
-# Some may have been created in the previous step; others might have been dropped in from other sources.
-Get-ChildItem $mergeRulesDynamicDir\*.xml, $mergeRulesStaticDir\*.xml | foreach {
-    $policyFileToMerge = $_
-    Write-Host ("`tMerging " + $_.Directory.Name + "\" + $_.Name) -ForegroundColor Cyan
-    $policyToMerge = [Microsoft.Security.ApplicationId.PolicyManagement.PolicyModel.AppLockerPolicy]::Load($policyFileToMerge)
-    $masterPolicy.Merge($policyToMerge)
-}
-
-# Delete the timestamp file so that it never gets copied accidentally to the MergeRules-Static directory
-Remove-Item $timestampFile
-
-#TODO: Optimize rules in rule collections here - combine/remove redundant/overlapping rules
-
-####################################################################################################
-# Generate final outputs
-####################################################################################################
-
-# Generate two versions of the rules file: one with rules enforced, and one with auditing only.
-
-Write-Host "Creating final rule outputs..." -ForegroundColor Cyan
-
-# Generate the Enforced version
-foreach( $ruleCollection in $masterPolicy.RuleCollections)
-{
-    $ruleCollection.EnforcementMode = "Enabled"
-}
-SaveAppLockerPolicyAsUnicodeXml -ALPolicy $masterPolicy -xmlFilename $rulesFileEnforceNew
-
-# Generate the AuditOnly version
-foreach( $ruleCollection in $masterPolicy.RuleCollections)
-{
-    $ruleCollection.EnforcementMode = "AuditOnly"
-}
-SaveAppLockerPolicyAsUnicodeXml -ALPolicy $masterPolicy -xmlFilename $rulesFileAuditNew
-
-if ($Excel)
-{
-    & $ps1_ExportPolicyToExcel -AppLockerXML $rulesFileEnforceNew -SaveWorkbook
-    & $ps1_ExportPolicyToExcel -AppLockerXML $rulesFileAuditNew -SaveWorkbook
-}
-
-# --------------------------------------------------------------------------------
-#>
