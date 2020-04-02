@@ -51,5 +51,5 @@ if ($null -ne $cs)
 }
 
 ### Windows Defender put their binaries in ProgramData for a while. Comment this back out when they move it back.
-"%OSDRIVE%\PROGRAMDATA\MICROSOFT\WINDOWS DEFENDER\PLATFORM\*"
+"%OSDRIVE%\PROGRAMDATA\MICROSOFT\WINDOWS DEFENDER\*"
 

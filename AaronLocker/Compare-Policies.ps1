@@ -49,6 +49,9 @@ If this optional switch is specified, entries that are in both sets and are iden
 .PARAMETER Excel
 If this optional switch is specified, outputs to a formatted Excel rather than tab-delimited CSV text to the pipeline. Note that when the -Excel switch is not used, line breaks within the CSV text fields are represented as "^|^".
 
+.PARAMETER GridView
+If this optional switch is specified, outputs to a PowerShell GridView (note that line breaks within the CSV text fields are represented as "^|^").
+
 .EXAMPLE
 .\Compare-Policies.ps1 local effective -DifferencesOnly
 Compare local policy against effective policy and report only the differences.
@@ -72,7 +75,11 @@ param(
 
     # Output to Excel
     [switch]
-    $Excel
+    $Excel,
+
+    # Output to GridView
+    [switch]
+    $GridView
 )
 
 $rootDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
@@ -360,6 +367,10 @@ if ($Excel)
         AddWorksheetFromCsvData -csv $csv -tabname "$refname vs $compname" -CrLfEncoded $linebreakSeq
         ReleaseExcelApplication
     }
+}
+elseif ($GridView)
+{
+    $csv | ConvertFrom-Csv -Delimiter "`t" | Out-GridView -Title $MyInvocation.MyCommand.Name
 }
 else
 {
