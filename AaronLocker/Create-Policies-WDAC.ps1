@@ -122,7 +122,7 @@ $WDACsignersToBuildRulesFor | foreach {
                 While ($i -le $NumRulesAdded)
                 {
                     $curTypeId = $WDACAllowRules[-$i].TypeId 
-                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.Replace(" ","_")}
+                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.ToUpper().Replace(" ","_")}
                     $i++
                 }
             }
@@ -162,7 +162,7 @@ $WDACsignersToBuildRulesFor | foreach {
                 # --------------------------------------------------------------------------------
                 # Build out the XML for the new Signer rule starting with the PCA certificate info
                 $newSigner = $WDACAllowBaseXML.CreateElement("Signer",$nsuri)
-                $SignerId = "ID_SIGNER_S_"+$CustomRuleCount+"_"+$label.Replace(" ","_")
+                $SignerId = "ID_SIGNER_S_"+$CustomRuleCount+"_"+$label.ToUpper().Replace(" ","_")
 
                 $newSigner.SetAttribute("ID",$SignerId)
                 $newSigner.SetAttribute("Name",$IssuerName)
@@ -185,7 +185,7 @@ $WDACsignersToBuildRulesFor | foreach {
                 if ($null -ne $FileAttribId)
                 {
                     $FileAttribRefNode = $WDACAllowBaseXML.CreateElement("FileAttribRef",$nsuri)
-                    $FileAttribRefNode.SetAttribute("RuleId",$FileAttribId)
+                    $FileAttribRefNode.SetAttribute("RuleID",$FileAttribId)
                     $newSigner.AppendChild($FileAttribRefNode)
                 }
                 $SignersNode.AppendChild($newSigner)
@@ -246,7 +246,7 @@ $hashRuleData | foreach {
     # Add FileAllow rule to User mode rules
     $UserModeFileRules = $WDACAllowBaseXML.DocumentElement.SelectSingleNode("//si:SigningScenario[@Value = '12']/si:ProductSigners/si:FileRulesRef",$nsBase)
     $AllowedFileRuleRefNode = $WDACAllowBaseXML.CreateElement("FileRuleRef",$nsuri)
-    $AllowedFileRuleRefNode.SetAttribute("RuleId",$FileHashAllowId)
+    $AllowedFileRuleRefNode.SetAttribute("RuleID",$FileHashAllowId)
     $UserModeFileRules.AppendChild($AllowedFileRuleRefNode)
 }
 
@@ -341,7 +341,7 @@ $UnsafePathsToBuildRulesFor | foreach {
                 While ($i -le $NumRulesAdded)
                 {
                     $curTypeId = $WDACAllowRules[-$i].TypeId 
-                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.Replace(" ","_")}
+                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.ToUpper().Replace(" ","_")}
                     $i++
                 }
             }
@@ -411,7 +411,7 @@ foreach ($CurPolicyType in "Allow","Deny")
         $PolicyID = $null
     }
 
-    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list"
+    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list - Audit"
     
     # Copy Base policy template to Outputs folder and rename
     cp $CurBaseXMLFile $CurAuditPolicyXMLFile
@@ -431,7 +431,7 @@ foreach ($CurPolicyType in "Allow","Deny")
     if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14}
 
     # Set policy name, version, and timestamp for the new policy file
-    Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName + " - Audit"
+    Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName 
     Set-CIPolicyVersion -FilePath $CurAuditPolicyXMLFile -Version $PolicyVersion
     Set-CIPolicySetting -FilePath $CurAuditPolicyXMLFile -Provider "PolicyInfo" -Key "Information" -ValueName "TimeStamp" -ValueType String -Value $strRuleDocTimestamp
 
@@ -454,7 +454,8 @@ foreach ($CurPolicyType in "Allow","Deny")
     cp $CurAuditPolicyXMLFile $CurEnforcedPolicyXMLFile
 
     # Update policy name for enforced policy
-    Set-CIPolicyIdInfo -FilePath $CurEnforcedPolicyXMLFile -PolicyName $PolicyName + " - Enforced"
+    $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list - Enforced"
+    Set-CIPolicyIdInfo -FilePath $CurEnforcedPolicyXMLFile -PolicyName $PolicyName
 
     # Remove audit mode option from enforced policy 
     Set-RuleOption -FilePath $CurEnforcedPolicyXMLFile -Option 3 -Delete # Turn off audit mode

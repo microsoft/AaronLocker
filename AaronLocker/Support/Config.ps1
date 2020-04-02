@@ -78,10 +78,10 @@ $rulesFileAuditSuffix = "-Audit.xml"
 $rulesFileEnforceSuffix = "-Enforce.xml"
 $rulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileAuditSuffix)
 $rulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileEnforceSuffix)
-$WDACrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "Allow" + $rulesFileAuditSuffix)
-$WDACrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "Allow" +  $rulesFileEnforceSuffix)
-$WDACDenyrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "Deny" + $rulesFileAuditSuffix)
-$WDACDenyrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "Deny" + $rulesFileEnforceSuffix)
+$WDACrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Allow" + $rulesFileAuditSuffix)
+$WDACrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Allow" +  $rulesFileEnforceSuffix)
+$WDACDenyrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Deny" + $rulesFileAuditSuffix)
+$WDACDenyrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Deny" + $rulesFileEnforceSuffix)
 # Get latest audit and enforce policy files, or $null if none found.
 function RulesFileAuditLatest()
 {
