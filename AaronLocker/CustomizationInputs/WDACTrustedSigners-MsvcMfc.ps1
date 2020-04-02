@@ -64,7 +64,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® .NET Framework";
-BinaryName = "MSVCR100_CLR0400.DLL";
+FileName = "MSVCR100_CLR0400.DLL";
 }
 
 ###########################################################################
@@ -77,7 +77,7 @@ IssuerName = "Microsoft Code Signing PCA";
 IssuerTBSHash = "27543A3F7612DE2261C7228321722402F63A07DE";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio® 2012";
-BinaryName = "MFC110.DLL";
+FileName = "MFC110.DLL";
 }
 
 @{
@@ -86,7 +86,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio® 2012";
-BinaryName = "MFC110.DLL";
+FileName = "MFC110.DLL";
 }
 
 @{
@@ -95,7 +95,7 @@ IssuerName = "Microsoft Code Signing PCA";
 IssuerTBSHash = "27543A3F7612DE2261C7228321722402F63A07DE";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio® 2012";
-BinaryName = "MSVCP110.DLL";
+FileName = "MSVCP110.DLL";
 }
 
 @{
@@ -104,7 +104,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio® 2012";
-BinaryName = "MSVCP110.DLL";
+FileName = "MSVCP110.DLL";
 }
 
 @{
@@ -113,7 +113,7 @@ IssuerName = "Microsoft Code Signing PCA";
 IssuerTBSHash = "27543A3F7612DE2261C7228321722402F63A07DE";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio® 2012";
-BinaryName = "MSVCR110.DLL";
+FileName = "MSVCR110.DLL";
 }
 
 @{
@@ -122,7 +122,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio® 2012";
-BinaryName = "MSVCR110.DLL";
+FileName = "MSVCR110.DLL";
 }
 
 ###########################################################################
@@ -135,7 +135,7 @@ IssuerName = "Microsoft Code Signing PCA";
 IssuerTBSHash = "27543A3F7612DE2261C7228321722402F63A07DE";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MFC120.DLL";
+FileName = "MFC120.DLL";
 }
 
 @{
@@ -144,7 +144,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MFC120.DLL";
+FileName = "MFC120.DLL";
 }
 
 @{
@@ -153,7 +153,7 @@ IssuerName = "Microsoft Code Signing PCA";
 IssuerTBSHash = "27543A3F7612DE2261C7228321722402F63A07DE";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MFC120U.DLL";
+FileName = "MFC120U.DLL";
 }
 
 @{
@@ -162,7 +162,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MFC120U.DLL";
+FileName = "MFC120U.DLL";
 }
 
 @{
@@ -171,7 +171,7 @@ IssuerName = "Microsoft Code Signing PCA";
 IssuerTBSHash = "27543A3F7612DE2261C7228321722402F63A07DE";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MSVCP120.DLL";
+FileName = "MSVCP120.DLL";
 }
 
 @{
@@ -180,7 +180,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MSVCP120.DLL";
+FileName = "MSVCP120.DLL";
 }
 
 @{
@@ -189,7 +189,7 @@ IssuerName = "Microsoft Code Signing PCA";
 IssuerTBSHash = "27543A3F7612DE2261C7228321722402F63A07DE";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MSVCR120.DLL";
+FileName = "MSVCR120.DLL";
 }
 
 @{
@@ -198,7 +198,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2013";
-BinaryName = "MSVCR120.DLL";
+FileName = "MSVCR120.DLL";
 }
 
 ###########################################################################
@@ -211,7 +211,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2015";
-BinaryName = "MSVCP140.DLL";
+FileName = "MSVCP140.DLL";
 }
 
 @{
@@ -220,7 +220,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2015";
-BinaryName = "VCRUNTIME140.DLL";
+FileName = "VCRUNTIME140.DLL";
 }
 
 @{
@@ -229,7 +229,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2015";
-BinaryName = "MFC140U.DLL";
+FileName = "MFC140U.DLL";
 }
 
 ###########################################################################
@@ -242,7 +242,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2017";
-BinaryName = "MSVCP140.DLL";
+FileName = "MSVCP140.DLL";
 }
 
 @{
@@ -251,7 +251,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 2017";
-BinaryName = "VCRUNTIME140.DLL";
+FileName = "VCRUNTIME140.DLL";
 }
 
 @{
@@ -260,7 +260,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName = "MICROSOFT® VISUAL STUDIO® 2017";
-BinaryName = "MFC140.DLL";
+FileName = "MFC140.DLL";
 }
 
 ###########################################################################
@@ -273,7 +273,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "MICROSOFT® VISUAL STUDIO® 10";
-BinaryName = "MFC100U.DLL";
+FileName = "MFC100U.DLL";
 }
 
 ###########################################################################
@@ -286,7 +286,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio®";
-BinaryName = "MSVCP140.DLL";
+FileName = "MSVCP140.DLL";
 }
 
 @{
@@ -295,7 +295,7 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio®";
-BinaryName = "VCRUNTIME140.DLL";
+FileName = "VCRUNTIME140.DLL";
 }
 
 @{
@@ -304,6 +304,6 @@ IssuerName = "Microsoft Code Signing PCA 2011";
 IssuerTBSHash = "F6F717A43AD9ABDDC8CEFDDE1C505462535E7D1307E630F9544A2D14FE8BF26E";
 PublisherName = "Microsoft Corporation";
 ProductName   = "Microsoft® Visual Studio®";
-BinaryName = "MFC140U.DLL";
+FileName = "MFC140U.DLL";
 }
 
