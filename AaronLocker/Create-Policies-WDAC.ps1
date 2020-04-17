@@ -426,9 +426,10 @@ foreach ($CurPolicyType in "Allow","Deny")
     }
 
     # Set policy options for audit policy
-    Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 12 # Enforce Store apps
-    if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13} 
-    if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14}
+    Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 12 # Required:Enforce Store Applications
+    if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13} # Enabled:Managed Installer
+    if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14} # Enabled:Intelligent Security Graph Authorization
+    if ($knownAdmins.Count > 0) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 18} # Disabled:Runtime FilePath Rule Protection
 
     # Set policy name, version, and timestamp for the new policy file
     Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName 
