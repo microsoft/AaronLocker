@@ -454,6 +454,44 @@ function IsWin32Executable([string]$filename)
 
 
 ####################################################################################################
+# Helper function used to replace current username with another in paths.
+####################################################################################################
+function RenamePaths($paths, $forUsername)
+{
+    # Warning: if $forUsername is "Users" that will be a problem.
+    $forUsername = "\" + $forUsername
+    # Look for username bracketed by backslashes, or at end of the path.
+    $CurrentName      = "\" + $env:USERNAME.ToLower() + "\"
+    $CurrentNameFinal = "\" + $env:USERNAME.ToLower()
+
+    $paths | ForEach-Object {
+        $origTargetDir = $_
+        # Temporarily remove trailing \* if present; can't GetFullPath with that.
+        if ($origTargetDir.EndsWith("\*"))
+        {
+            $bAppend = "\*"
+            $targetDir = $origTargetDir.Substring(0, $origTargetDir.Length - 2)
+        }
+        else
+        {
+            $bAppend = ""
+            $targetDir = $origTargetDir
+        }
+        # GetFullPath in case the provided name is 8.3-shortened.
+        $targetDir = [System.IO.Path]::GetFullPath($targetDir).ToLower()
+        if ($targetDir.Contains($CurrentName) -or $targetDir.EndsWith($CurrentNameFinal))
+        {
+            $targetDir.Replace($CurrentNameFinal, $forUsername) + $bAppend
+        }
+        else
+        {
+            $origTargetDir
+        }
+    }
+}
+
+
+####################################################################################################
 # Global variables - known file extensions
 ####################################################################################################
 #

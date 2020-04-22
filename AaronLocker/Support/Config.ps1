@@ -33,9 +33,15 @@ $ps1_GetSafePathsToAllow        = [System.IO.Path]::Combine($customizationInputs
 $ps1_UnsafePathsToBuildRulesFor = [System.IO.Path]::Combine($customizationInputsDir, "UnsafePathsToBuildRulesFor.ps1")
 $fname_TrustedSigners           = "TrustedSigners.ps1"
 $ps1_TrustedSigners             = [System.IO.Path]::Combine($customizationInputsDir, $fname_TrustedSigners)
+$ps1_TrustedSignersWDAC         = [System.IO.Path]::Combine($customizationInputsDir, "WDACTrustedSigners.ps1")
 $ps1_HashRuleData               = [System.IO.Path]::Combine($customizationInputsDir, "HashRuleData.ps1")
 $ps1_KnownAdmins                = [System.IO.Path]::Combine($customizationInputsDir, "KnownAdmins.ps1")
+$ps1_CreatePoliciesAppLocker    = [System.IO.Path]::Combine($rootDir, "Create-Policies-AppLocker.ps1")
+$ps1_CreatePoliciesWDAC         = [System.IO.Path]::Combine($rootDir, "Create-Policies-WDAC.ps1")
 
+# File prefixes for AppLocker and WDAC
+$rulesFileBase = "AppLockerRules-"
+$WDACrulesFileBase = "WDACRules-"
 # Path to results from scanning files listed in GetExeFilesToBlacklist
 $ExeBlacklistData = [System.IO.Path]::Combine($scanResultsDir, "ExeBlacklistData.txt")
 # Paths to "full" results of all user-writable directories under Windir and the ProgramFiles directories.
@@ -68,11 +74,14 @@ $dtNow = [datetime]::Now
 $strRuleDocTimestamp = $dtNow.ToString("yyyy-MM-dd HH:mm")
 $strFnameTimestamp = $dtNow.ToString("yyyyMMdd-HHmm")
 $strTimestampForHashRule = $dtNow.ToString("yyyyMMddHHmmss")
-$rulesFileBase = "AppLockerRules-"
 $rulesFileAuditSuffix = "-Audit.xml"
 $rulesFileEnforceSuffix = "-Enforce.xml"
 $rulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileAuditSuffix)
 $rulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $rulesFileBase + $strFnameTimestamp + $rulesFileEnforceSuffix)
+$WDACrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Allow" + $rulesFileAuditSuffix)
+$WDACrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Allow" +  $rulesFileEnforceSuffix)
+$WDACDenyrulesFileAuditNew   = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Deny" + $rulesFileAuditSuffix)
+$WDACDenyrulesFileEnforceNew = [System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + $strFnameTimestamp + "-Deny" + $rulesFileEnforceSuffix)
 # Get latest audit and enforce policy files, or $null if none found.
 function RulesFileAuditLatest()
 {
@@ -81,6 +90,22 @@ function RulesFileAuditLatest()
 function RulesFileEnforceLatest()
 {
     Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $rulesFileBase + "*" + $rulesFileEnforceSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACRulesFileAuditLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileAuditSuffix)) -Exclude *DENY* | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACRulesFileEnforceLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*" + $rulesFileEnforceSuffix)) -Exclude *DENY* | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACDenyRulesFileAuditLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*Deny" + $rulesFileAuditSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
+}
+function WDACDenyRulesFileEnforceLatest()
+{
+    Get-ChildItem $([System.IO.Path]::Combine($outputsDir, $WDACrulesFileBase + "*Deny" + $rulesFileEnforceSuffix)) | foreach { $_.FullName } | Sort-Object | Select-Object -Last 1
 }
 
 

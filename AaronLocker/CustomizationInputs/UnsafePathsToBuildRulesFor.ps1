@@ -19,12 +19,22 @@ Hashtable properties:
                          pubProdBinVer - highest granularity: Publisher rules specify publisher, product, binary name, and minimum version.
                        Microsoft-signed Windows and Visual Studio files are always handled at a minimum granularity of "pubProductBinary";
                        other Microsoft-signed files are handled at a minimum granularity of "pubProduct".
+                       ****NOTE**** 
+                            pubruleGranularity is handled very differently for WDAC policies. WDAC rules use the pubruleGranularity to determine the default -Level but then falls
+                            back to successively more restrictive options.The Granularity mappings are as follows:
+                            pubOnly --> -Level Publisher -Fallback FilePublisher,FileName,Hash
+                            pubProduct --> -Level FilePublisher -SpecificFileNameLevel ProductName -Fallback FilePublisher,FileName,Hash
+                            pubProductBinary --> NOT supported for WDAC rules. Reverts to pubProdBinVer.
+                            pubProdBinVer --> -Level FilePublisher -Fallback FileName,Hash (ProductName *not* included in generated rule)
 * JSHashRules        - OPTIONAL; if specified and set to $true, generates hash rules for unsigned .js files; otherwise, doesn't generate them.
+                       NOTE: JSHashRules is *ignored* for WDAC policy generation. Hash rules are always created for .js files discovered. 
 * noRecurse          - OPTIONAL; if specified and set to $true, rules are generated only for the files in the specified directory or directories.
                        Otherwise, rules are also generated for files in subdirectories of the specified directory or directories.
+                       NOTE: noRecurse is *ignored* for WDAC policy generation. Subdirectories are always scanned.
 * enforceMinVersion  - DEPRECATED and OPTIONAL. pubruleGranularity takes precedence if specified.
                          Otherwise, setting to $false equivalent to pubruleGranularity = pubProductBinary;
                          setting to $true equivalent to pubruleGranularity = pubProdBinVer.
+                       NOTE: enforceMinversion is always *ignored* for WDAC policy generation. MinVersion is always included in rules.
                       
 Examples of valid hash tables:
 
