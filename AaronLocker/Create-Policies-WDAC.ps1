@@ -277,25 +277,25 @@ $UnsafePathsToBuildRulesFor | foreach {
         { 
             $level = "Publisher"
             $SpecificFileNameLevel = "None"
-            $Fallback = "FilePublisher,FileName,Hash"
+            $Fallback = "FilePublisher","FileName","Hash"
         }
         "pubProduct"
         {
             $level = "FilePublisher"
             $SpecificFileNameLevel = "ProductName"
-            $Fallback = "FilePublisher,FileName,Hash"
+            $Fallback = "FilePublisher","FileName","Hash"
         }
         "pubProductBinary"
         {
             $level = "FilePublisher"
             $SpecificFileNameLevel = "OriginalFileName"
-            $Fallback = "FileName,Hash"
+            $Fallback = "FileName","Hash"
         }
         "pubProdBinVer"
         {
             $level = "FilePublisher"
             $SpecificFileNameLevel = "OriginalFileName"
-            $Fallback = "FileName,Hash"
+            $Fallback = "FileName","Hash"
         }
         # This catch-all here in case the parameter ValidateSet attribute changes and this block doesn't...
         default
@@ -323,7 +323,7 @@ $UnsafePathsToBuildRulesFor | foreach {
                 if ($PathInfo -is [System.IO.DirectoryInfo])
                 {
                     $DriverFiles = Get-SystemDriver -ScanPath $CurPath -UserPEs
-                    if ($DriverFiles.Count > 0) 
+                    if ($DriverFiles.Count -gt 0) 
                     {
                         $WDACAllowRules += & New-CIPolicyRule -DriverFiles $DriverFiles -Level $level -Fallback $Fallback -SpecificFileNameLevel $SpecificFileNameLevel
                     }
