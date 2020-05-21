@@ -107,6 +107,14 @@ ProductName = "MICROSOFT® WINDOWS® OPERATING SYSTEM";
 BinaryName = "AEINV.DLL";
 }
 
+# Allow protected content run in MS Edge
+@{
+label = "MS Edge content protection";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName = "WIDEVINE CONTENT DECRYPTION MODULE";
+RuleCollection = "Dll";
+}
+
 # Uncomment this block if Google Chrome is installed to ProgramFiles.
 # Google Chrome runs some code in the user profile even when Chrome is installed to Program Files.
 # This creates publisher rules that allow those components to run.
@@ -136,6 +144,19 @@ BinaryName = "AEINV.DLL";
     RuleCollection = "Dll";
     PublisherName = "O=ESET, SPOL. S R.O., L=BRATISLAVA, S=SLOVAKIA, C=SK";
     ProductName = "CHROME PROTECTOR";
+    }
+#>
+
+# Uncomment this block to allow popular non-Microsoft remote meeting products
+<#
+    @{
+    label = "WebEx";
+    PublisherName = "O=CISCO WEBEX LLC, L=SAN JOSE, S=CALIFORNIA, C=US";
+    }
+
+    @{
+    label = "Zoom";
+    PublisherName = "O=ZOOM VIDEO COMMUNICATIONS, INC., L=SAN JOSE, S=CALIFORNIA, C=US";
     }
 #>
 

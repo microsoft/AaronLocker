@@ -164,6 +164,35 @@ if ( ! ( (Test-Path($windirTxt)) -and (Test-Path($PfTxt)) -and (Test-Path($Pf86T
     $Rescan = $true
 }
 
+# AppLocker policy creation uses Sysinternals AccessChk.exe which must be in the Path or in the script directory. If it isn't,
+# this script writes an error message and quits.
+if ($Rescan -and ($AppLockerOrWDAC -in("AppLocker","Both")))
+{
+    # If accesschk.exe is in the rootdir, temporarily add the rootdir to the path.
+    # (Previous implementation invoked Get-Command to see whether accesschk.exe was in the path, and only if that failed looked for
+    # accesschk.exe in the rootdir. However, there was no good way to keep Get-Command from displaying a "Suggestion" message in that
+    # scenario.)
+    # Variable for restoring original Path, if necessary.
+    $origPath = ""
+    # Check for accesschk.exe in the rootdir.
+    if (Test-Path -Path $rootDir\AccessChk.exe)
+    {
+        # Found it in this script's directory. Temporarily prepend it to the path.
+        $origPath = $env:Path
+        $env:Path = "$rootDir;" + $origPath
+    }
+    # Otherwise, if AccessChk.exe not available in the path, write an error message and quit.
+    elseif ($null -eq (Get-Command AccessChk.exe -ErrorAction SilentlyContinue))
+    {
+        $errMsg = "Scanning for writable subdirectories requires that Sysinternals AccessChk.exe be in the Path or in the same directory with this script.`n" +
+            "AccessChk.exe was not found.`n" +
+            "(See .\Support\DownloadAccesschk.ps1 for help.)`n" +
+            "Exiting..."
+        Write-Error $errMsg
+        return
+    }
+}
+
 # Get custom admins, if any defined
 [System.Collections.ArrayList]$knownAdmins = @()
 $knownAdmins.AddRange( @(& $ps1_KnownAdmins) )
