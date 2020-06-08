@@ -214,3 +214,22 @@ ProductName   = "MICROSOFT® VISUAL STUDIO® 10";
 BinaryName = "MFC100U.DLL";
 }
 
+###########################################################################
+# Visual Studio (unspecified)
+###########################################################################
+
+@{
+label = "MSVC runtime DLL";
+RuleCollection = "Dll";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName   = "MICROSOFT® VISUAL STUDIO®";
+BinaryName = "MSVCP140.DLL";
+}
+
+@{
+label = "MSVC runtime DLL";
+RuleCollection = "Dll";
+PublisherName = "O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US";
+ProductName   = "MICROSOFT® VISUAL STUDIO®";
+BinaryName = "VCRUNTIME140.DLL";
+}

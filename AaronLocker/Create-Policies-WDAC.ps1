@@ -122,7 +122,7 @@ $WDACsignersToBuildRulesFor | foreach {
                 While ($i -le $NumRulesAdded)
                 {
                     $curTypeId = $WDACAllowRules[-$i].TypeId 
-                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.ToUpper().Replace(" ","_")}
+                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+($label.ToUpper()  -replace ("\W","_"))}
                     $i++
                 }
             }
@@ -162,7 +162,7 @@ $WDACsignersToBuildRulesFor | foreach {
                 # --------------------------------------------------------------------------------
                 # Build out the XML for the new Signer rule starting with the PCA certificate info
                 $newSigner = $WDACAllowBaseXML.CreateElement("Signer",$nsuri)
-                $SignerId = "ID_SIGNER_S_"+$CustomRuleCount+"_"+$label.ToUpper().Replace(" ","_")
+                $SignerId = "ID_SIGNER_S_"+$CustomRuleCount+"_"+($label.ToUpper() -replace ("\W","_"))
 
                 $newSigner.SetAttribute("ID",$SignerId)
                 $newSigner.SetAttribute("Name",$IssuerName)
@@ -228,7 +228,7 @@ $hashRuleData | foreach {
     $HashRuleName = $_.RuleName
     $HashValue = $_.HashVal.Substring(2)
     $FileName = $_.FileName
-    $FileHashAllowId = "ID_ALLOW_A_"+$CustomRuleCount+$FileName.Replace(" ","_")
+    $FileHashAllowId = "ID_ALLOW_A_"+$CustomRuleCount+($FileName  -replace ("\W","_"))
 
     $newFileAllow = $WDACAllowBaseXML.CreateElement("Allow",$nsuri)
     $newFileAllow.SetAttribute("ID",$FileHashAllowId)
@@ -341,7 +341,7 @@ $UnsafePathsToBuildRulesFor | foreach {
                 While ($i -le $NumRulesAdded)
                 {
                     $curTypeId = $WDACAllowRules[-$i].TypeId 
-                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+$label.ToUpper().Replace(" ","_")}
+                    if ($curTypeId -ne "FileAttrib") {$WDACAllowRules[-$i].Id = $WDACAllowRules[-$i].Id+"_"+($label.ToUpper() -replace ("\W","_"))}
                     $i++
                 }
             }
@@ -429,7 +429,7 @@ foreach ($CurPolicyType in "Allow","Deny")
     Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 12 # Required:Enforce Store Applications
     if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13} # Enabled:Managed Installer
     if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14} # Enabled:Intelligent Security Graph Authorization
-    if ($knownAdmins.Count > 0) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 18} # Disabled:Runtime FilePath Rule Protection
+    if ($knownAdmins.Count -gt 0) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 18} # Disabled:Runtime FilePath Rule Protection
 
     # Set policy name, version, and timestamp for the new policy file
     Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName 

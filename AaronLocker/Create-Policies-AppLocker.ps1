@@ -19,37 +19,10 @@ Create-Policies-AppLocker.ps1 is called by Create-Policies.ps1 to generate compr
 # If $Rescan enabled, enumerate user-writable directories under %windir% and the ProgramFiles directories
 # (scans the '(x86)' one only if present; doesn't raise an error if not present).
 # This must be done at least once. Note that it can be time-consuming. Admin rights are recommended.
-# Scanning requires that Sysinternals AccessChk.exe be in the Path or in the script directory. If it isn't,
-# this script writes an error message and quits.
 # Outputs the list of all writable subdirectories to "*_Full.txt"; the rules are built using those results with redundant lines removed.
 # The filtered lists can be hand-edited if absolutely necessary.
 if ($Rescan)
 {
-    # Scanning requires that AccessChk.exe be available.
-    # If accesschk.exe is in the rootdir, temporarily add the rootdir to the path.
-    # (Previous implementation invoked Get-Command to see whether accesschk.exe was in the path, and only if that failed looked for
-    # accesschk.exe in the rootdir. However, there was no good way to keep Get-Command from displaying a "Suggestion" message in that
-    # scenario.)
-    # Variable for restoring original Path, if necessary.
-    $origPath = ""
-    # Check for accesschk.exe in the rootdir.
-    if (Test-Path -Path $rootDir\AccessChk.exe)
-    {
-        # Found it in this script's directory. Temporarily prepend it to the path.
-        $origPath = $env:Path
-        $env:Path = "$rootDir;" + $origPath
-    }
-    # Otherwise, if AccessChk.exe not available in the path, write an error message and quit.
-    elseif ($null -eq (Get-Command AccessChk.exe -ErrorAction SilentlyContinue))
-    {
-        $errMsg = "Scanning for writable subdirectories requires that Sysinternals AccessChk.exe be in the Path or in the same directory with this script.`n" +
-            "AccessChk.exe was not found.`n" +
-            "(See .\Support\DownloadAccesschk.ps1 for help.)`n" +
-            "Exiting..."
-        Write-Error $errMsg
-        return
-    }
-
     # Enumerate user-writable subdirectories in protected directories. Capture grantees so they can be inspected afterwards.
 	Write-Host "Enumerating writable directories in $env:windir" -ForegroundColor Cyan
 	& $ps1_EnumWritableDirs -RootDirectory $env:windir -ShowGrantees -OutputXML -KnownAdmins $knownAdmins | Out-File -Encoding ASCII $windirFullXml
