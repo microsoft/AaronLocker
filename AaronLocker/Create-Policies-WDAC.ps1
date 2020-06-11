@@ -21,7 +21,7 @@ $WDACDenyBaseXMLFile = $env:windir+"\schemas\CodeIntegrity\ExamplePolicies\Allow
 $WDACAllowBaseXMLFile = $env:windir+"\schemas\CodeIntegrity\ExamplePolicies\DenyAllAudit.xml"
 
 $WDACAllowRulesXMLFile = ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "AllowRules.xml"))
-$WDACBlockPolicyXMLFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "ExeBlocklist.xml")
+$WDACBlockPolicyXMLFile = [System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase + "DenyRules.xml")
 
 # Delete previous set of dynamically-generated rules first
 Remove-Item ([System.IO.Path]::Combine($mergeRulesDynamicDir, $WDACrulesFileBase+"*.xml"))
@@ -380,7 +380,7 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
 # Generate two versions of the Allow rules file and two versions of the Deny rules file: one with rules enforced, and one with auditing only for each.
 foreach ($CurPolicyType in "Allow","Deny")
 {
-    if ($CurPolicyType = "Allow")
+    if ($CurPolicyType -eq "Allow")
     {
         $CurBaseXMLFile = $WDACBaseXMLFile
         $CurAuditPolicyXMLFile = $WDACrulesFileAuditNew
@@ -407,7 +407,7 @@ foreach ($CurPolicyType in "Allow","Deny")
     }
     else
     {
-        $PolicyVersion = "1.0.0.0"
+        [version]$PolicyVersion = "1.0.0.0"
         $PolicyID = $null
     }
 
@@ -416,28 +416,8 @@ foreach ($CurPolicyType in "Allow","Deny")
     # Copy Base policy template to Outputs folder and rename
     cp $CurBaseXMLFile $CurAuditPolicyXMLFile
 
-    Write-Host "Merging custom rule sets into new policy file..." -ForegroundColor Cyan
-    # Merge any and all policy files found in the MergeRules directories, typically for authorized files in writable directories.
-    # Some may have been created in the previous step; others might have been dropped in from other sources.
-    Get-ChildItem $mergeRulesDynamicDir\$WDACrulesFileBase*.xml, $mergeRulesStaticDir\$WDACrulesFileBase*.xml -Exclude $Exclusion | foreach {
-        $policyFileToMerge = $_
-        Write-Host ("`tMerging " + $_.Directory.Name + "\" + $_.Name) -ForegroundColor Cyan
-        Merge-CIPolicy -OutputFilePath $CurAuditPolicyXMLFile -PolicyPaths $CurAuditPolicyXMLFile,$policyFileToMerge
-    }
-
-    # Set policy options for audit policy
-    Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 12 # Required:Enforce Store Applications
-    if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13} # Enabled:Managed Installer
-    if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14} # Enabled:Intelligent Security Graph Authorization
-    if ($knownAdmins.Count -gt 0) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 18} # Disabled:Runtime FilePath Rule Protection
-
-    # Set policy name, version, and timestamp for the new policy file
-    Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName 
-    Set-CIPolicyVersion -FilePath $CurAuditPolicyXMLFile -Version $PolicyVersion
-    Set-CIPolicySetting -FilePath $CurAuditPolicyXMLFile -Provider "PolicyInfo" -Key "Information" -ValueName "TimeStamp" -ValueType String -Value $strRuleDocTimestamp
-
     #Set new policy ID to previous policy ID (if exists) or generate new ID
-    if ($PolicyID -ne $null)
+    if ($PolicyID -notin $null,"")
     {
         [xml]$CurAuditPolicyXML = Get-Content -Path $CurAuditPolicyXMLFile
         $CurAuditPolicyXML.SiPolicy.BasePolicyID = $PolicyID
@@ -448,14 +428,39 @@ foreach ($CurPolicyType in "Allow","Deny")
     }
     else
     {
+        Write-Host "Resetting new PolicyID for $CurAuditPolicyXMLFile..." -ForegroundColor Cyan
         Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -ResetPolicyID
     }
 
+    # Set policy options for audit policy
+    Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 3 # Enabled:Audit Mode
+    Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 12 # Required:Enforce Store Applications
+    if ($WDACTrustManagedInstallers) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 13} # Enabled:Managed Installer
+    if ($WDACTrustISG) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 14} # Enabled:Intelligent Security Graph Authorization
+    if ($knownAdmins.Count -gt 0) {Set-RuleOption -FilePath $CurAuditPolicyXMLFile -Option 18} # Disabled:Runtime FilePath Rule Protection
+
+    Write-Host "Merging custom rule sets into new policy file..." -ForegroundColor Cyan
+    # Merge any and all policy files found in the MergeRules directories, typically for authorized files in writable directories.
+    # Some may have been created in the previous step; others might have been dropped in from other sources.
+    Get-ChildItem $mergeRulesDynamicDir\$WDACrulesFileBase*.xml, $mergeRulesStaticDir\$WDACrulesFileBase*.xml -Exclude $Exclusion | foreach {
+        $policyFileToMerge = $_
+        Write-Host ("`tMerging " + $_.Directory.Name + "\" + $_.Name) -ForegroundColor Cyan
+        Merge-CIPolicy -OutputFilePath $CurAuditPolicyXMLFile -PolicyPaths $CurAuditPolicyXMLFile,$policyFileToMerge
+    }
+
+    Write-Host "Updating PolicyName, PolicyVersion, and TimeStamp..." -ForegroundColor Cyan
+    # Set policy name, version, and timestamp for the new policy file
+    Set-CIPolicyIdInfo -FilePath $CurAuditPolicyXMLFile -PolicyName $PolicyName 
+    Set-CIPolicyVersion -FilePath $CurAuditPolicyXMLFile -Version $PolicyVersion
+    Set-CIPolicySetting -FilePath $CurAuditPolicyXMLFile -Provider "PolicyInfo" -Key "Information" -ValueName "TimeStamp" -ValueType String -Value $strRuleDocTimestamp
+
     # Copy Audit policy to enforced
+    Write-Host "Copying $CurAuditPolicyXMLFile to $CurEnforcedPolicyXMLFile..." -ForegroundColor Cyan
     cp $CurAuditPolicyXMLFile $CurEnforcedPolicyXMLFile
 
     # Update policy name for enforced policy
     $PolicyName = "WDAC AaronLocker "+ $CurPolicyType +" list - Enforced"
+    Write-Host "Setting PolicyName for $CurEnforcedPolicyXMLFile to $PolicyName..." -ForegroundColor Cyan
     Set-CIPolicyIdInfo -FilePath $CurEnforcedPolicyXMLFile -PolicyName $PolicyName
 
     # Remove audit mode option from enforced policy 
