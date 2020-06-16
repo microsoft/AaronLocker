@@ -50,7 +50,7 @@ Sysinternals AccessChk is available here:
 or run .\Support\DownloadAccesschk.ps1, which downloads AccessChk.exe to the main AaronLocker directory.
 
 .PARAMETER Rescan
-If this switch is set, this script scans the Windows and ProgramFiles directories for user-writable subdirectories, and captures data about EXE files to blacklist.
+If this switch is set, this script scans the Windows and ProgramFiles directories for user-writable subdirectories, and captures data about EXE files to DenyList.
 If the results from a previous scan are found in the expected location and this switch is not specified, the script does not perform those scans. If those results are not found, the script performs the scan even if this switch is not set.
 It is STRONGLY recommended that the scanning be performed with administrative rights.
 
@@ -218,11 +218,11 @@ if (($Rescan) -and ($AppLockerOrWDAC -eq "WDAC") -and !($ProcessWDACLikeAppLocke
 # Process common custom inputs once before calling AppLocker- and WDAC-specific scripts
 ####################################################################################################
 # Get Block List -- WDAC could potentially use recommended blocks policy instead? If so, move this back to AppLocker-specific script
-if ( $Rescan -or ( ($AppLockerOrWDAC -in "Both","AppLocker") -and !(Test-Path($ExeBlacklistData) ) ) -or ( ($AppLockerOrWDAC -in "Both","WDAC") ) )
+if ( $Rescan -or ( ($AppLockerOrWDAC -in "Both","AppLocker") -and !(Test-Path($ExeDenyListData) ) ) -or ( ($AppLockerOrWDAC -in "Both","WDAC") ) )
 {
-    Write-Host "Get EXE files to blacklist for later processing..." -ForegroundColor Cyan
-    # Get the EXE files to blacklist from the script that produces that list.
-    $exeFilesToBlacklist = (& $ps1_GetExeFilesToBlacklist)
+    Write-Host "Get EXE files to DenyList for later processing..." -ForegroundColor Cyan
+    # Get the EXE files to DenyList from the script that produces that list.
+    $exeFilesToDenyList = (& $ps1_GetExeFilesToDenyList)
 }
 
 # Get additional authorized safe paths from the script that produces that list 

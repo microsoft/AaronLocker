@@ -126,14 +126,14 @@ if ($Rescan)
 }
 
 ####################################################################################################
-# Build AppLocker pub rule data for Exe files to blacklist if needed
+# Build AppLocker pub rule data for Exe files to DenyList if needed
 ####################################################################################################
-if ( $Rescan -or !(Test-Path($ExeBlacklistData) ) )
+if ( $Rescan -or !(Test-Path($ExeDenyListData) ) )
 {
     # Create a hash collection for publisher information. Key on publisher name, product name, and binary name.
     # Add to collection if equivalent is not already in the collection.
     $pubCollection = @{}
-    $exeFilesToBlacklist | foreach {
+    $exeFilesToDenyList | foreach {
 	    $pub = (Get-AppLockerFileInformation "$_").Publisher
         if ($null -ne $pub)
         {
@@ -142,14 +142,14 @@ if ( $Rescan -or !(Test-Path($ExeBlacklistData) ) )
         }
         else
         {
-            Write-Warning "UNABLE TO BUILD BLACKLIST RULE FOR $_"
+            Write-Warning "UNABLE TO BUILD DENYLIST RULE FOR $_"
         }
     }
 
     $pubCollection.Values | 
         Select-Object PublisherName, ProductName, BinaryName | 
         ConvertTo-Csv -NoTypeInformation |
-        Out-File $ExeBlacklistData -Encoding unicode
+        Out-File $ExeDenyListData -Encoding unicode
 }
 
 ####################################################################################################
@@ -166,10 +166,10 @@ if ( ! ( (Test-Path($windirTxt)) -and (Test-Path($PfTxt)) -and (Test-Path($Pf86T
     return
 }
 
-if ( ! (Test-Path($ExeBlacklistData)) )
+if ( ! (Test-Path($ExeDenyListData)) )
 {
     $errMsg = "The following file is missing:`n" +
-        "`t" + $ExeBlacklistData +"`n"
+        "`t" + $ExeDenyListData +"`n"
     Write-Error $errMsg
     return
 }
@@ -243,16 +243,16 @@ $Wr_raw_PF | foreach {
 $xDocument = [xml](Get-Content $defRulesXml)
 
 ####################################################################################################
-# Incorporate data for EXE files to blacklist under Windir
+# Incorporate data for EXE files to DenyList under Windir
 ####################################################################################################
 
-# Incorporate the EXE blacklist into the document where the one PLACEHOLDER_WINDIR_EXEBLACKLIST
+# Incorporate the EXE DenyList into the document where the one PLACEHOLDER_WINDIR_EXEDENYLIST
 # placeholder is.
-$xPlaceholder = $xDocument.SelectNodes("//PLACEHOLDER_WINDIR_EXEBLACKLIST")[0]
+$xPlaceholder = $xDocument.SelectNodes("//PLACEHOLDER_WINDIR_EXEDENYLIST")[0]
 $xExcepts = $xPlaceholder.ParentNode
 
-$csvExeBlacklistData = (Get-Content $ExeBlacklistData | ConvertFrom-Csv)
-$csvExeBlacklistData | foreach {
+$csvExeDenyListData = (Get-Content $ExeDenyListData | ConvertFrom-Csv)
+$csvExeDenyListData | foreach {
     # Create a FilePublisherCondition element with the publisher attributes
     $elem = $xDocument.CreateElement("FilePublisherCondition")
     $elem.SetAttribute("PublisherName", $_.PublisherName)
@@ -270,7 +270,7 @@ $csvExeBlacklistData | foreach {
 # Remove the placeholder element
 $xExcepts.RemoveChild($xPlaceholder) | Out-Null
 
-Write-Host "Processing additional safe paths to whitelist..." -ForegroundColor Cyan
+Write-Host "Processing additional safe paths to AllowList..." -ForegroundColor Cyan
 # Incorporate authorized safe paths into the document
 # Add "allow" for Everyone for Exe, Dll, and Script rules
 $xRuleCollections = $xDocument.SelectNodes("//RuleCollection[@Type='Exe' or @Type='Script' or @Type='Dll']")
@@ -458,7 +458,7 @@ $signersToBuildRulesFor | foreach {
 
             if ($publisher.ToLower().Contains("microsoft") -and $product.Length -eq 0 -and ($ruleCollection.Length -eq 0 -or $ruleCollection -eq "Exe"))
             {
-                Write-Warning -Message ("Warning: Trusting all Microsoft-signed files is an overly-broad whitelisting strategy")
+                Write-Warning -Message ("Warning: Trusting all Microsoft-signed files is an overly-broad AllowListing strategy")
             }
 
             if ($ruleCollection)

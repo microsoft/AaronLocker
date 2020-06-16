@@ -18,7 +18,7 @@ The -FromDateTime and -ToDateTime options enable you to limit events to time ran
 
 Data from each event is turned into a line of tab-delimited CSV. Lines are sorted before being output.
 
-Random-named temporary files created by PowerShell to test whitelisting policy are filtered out by default.
+Random-named temporary files created by PowerShell to test AllowListing policy are filtered out by default.
 
 Use the -ComputerName parameter to name a remote computer from which to retrieve live-log events (default logs or event collectors).
 Use the -WarningOnly, -ErrorOnly, -AllowedOnly, or -AllEvents switches to retrieve events other than errors and warnings.
@@ -104,7 +104,7 @@ Can be used with -FromDateTime to specify a date/time range. Date/time specified
 If specified, does not report modern-app AutoNGEN files that are unsigned and in the user's profile.
 
 .PARAMETER NoPSFilter
-If specified, does not try to filter out random-named PowerShell scripts used to determine whether whitelisting is in effect.
+If specified, does not try to filter out random-named PowerShell scripts used to determine whether AllowListing is in effect.
 
 .PARAMETER NoFilteredMachines
 By default, this script outputs a single artificial "empty" event line for every machine for which all observed events were filtered out.
@@ -388,7 +388,7 @@ Write-Verbose "XPath filter = $filter"
 # Match AutoNGEN native image file path
 $AutoNGENPattern = "^(%OSDRIVE%|C:)\\Users\\[^\\]*\\AppData\\Local\\Packages\\.*\\NATIVEIMAGES\\.*\.NI\.(EXE|DLL)$"
 
-# PowerShell script-policy-test file - PS creates files in user temp directory and tests against whitelisting policy to determine whether to run in ConstrainedLanguage mode.
+# PowerShell script-policy-test file - PS creates files in user temp directory and tests against AllowListing policy to determine whether to run in ConstrainedLanguage mode.
 # Filter out those test files by default.
 # Current implementation: match partial path of file in temp directory with form "XXXXXXXX.XXX.PS*" or "__PSScriptPolicyTest_XXXXXXXX.XXX.PS*"
 $PsPolicyTestPattern = "\\APPDATA\\LOCAL\\TEMP\\(__PSScriptPolicyTest_)?[A-Z0-9]{8}\.[A-Z0-9]{3}\.PS"
