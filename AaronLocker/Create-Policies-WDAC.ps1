@@ -376,7 +376,7 @@ Merge-CIPolicy -OutputFilePath $WDACAllowRulesXMLFile -PolicyPaths $WDACAllowRul
 
 
 ###################################################################################################
-# Create block policy from Exe files to blacklist if needed. Merge the deny rules with the allow all example policy.
+# Create block policy from Exe files to DenyList if needed. Merge the deny rules with the allow all example policy.
 ####################################################################################################
 if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
 {
@@ -384,7 +384,7 @@ if ( $Rescan -or !(Test-Path($WDACBlockPolicyXMLFile) ) )
     # Create a hash collection for publisher information. Key on publisher name, product name, and binary name.
     # Add to collection if equivalent is not already in the collection.
     $WDACExeFilesToBlock = @()
-    $WDACExeFilesToBlock += $exeFilesToBlackList
+    $WDACExeFilesToBlock += $exeFilesToDenyList
 	$WDACBlockRules = & New-CIPolicyRule  -DriverFilePath $WDACExeFilesToBlock -Level FilePublisher -Fallback FileName, Hash, FilePath -Deny
     New-CIPolicy -Rules $WDACBlockRules -FilePath $WDACBlockPolicyXMLFile -UserPEs -MultiplePolicyFormat
 }

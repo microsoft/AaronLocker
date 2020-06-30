@@ -28,7 +28,7 @@ $scanResultsDir         = [System.IO.Path]::Combine($rootDir, "ScanResults")
 ####### INPUTS
 
 # Script inputs
-$ps1_GetExeFilesToBlacklist     = [System.IO.Path]::Combine($customizationInputsDir, "GetExeFilesToBlacklist.ps1")
+$ps1_GetExeFilesToDenyList     = [System.IO.Path]::Combine($customizationInputsDir, "GetExeFilesToDenyList.ps1")
 $ps1_GetSafePathsToAllow        = [System.IO.Path]::Combine($customizationInputsDir, "GetSafePathsToAllow.ps1")
 $ps1_UnsafePathsToBuildRulesFor = [System.IO.Path]::Combine($customizationInputsDir, "UnsafePathsToBuildRulesFor.ps1")
 $fname_TrustedSigners           = "TrustedSigners.ps1"
@@ -42,8 +42,8 @@ $ps1_CreatePoliciesWDAC         = [System.IO.Path]::Combine($rootDir, "Create-Po
 # File prefixes for AppLocker and WDAC
 $rulesFileBase = "AppLockerRules-"
 $WDACrulesFileBase = "WDACRules-"
-# Path to results from scanning files listed in GetExeFilesToBlacklist
-$ExeBlacklistData = [System.IO.Path]::Combine($scanResultsDir, "ExeBlacklistData.txt")
+# Path to results from scanning files listed in GetExeFilesToDenyList
+$ExeDenyListData = [System.IO.Path]::Combine($scanResultsDir, "ExeDenyListData.txt")
 # Paths to "full" results of all user-writable directories under Windir and the ProgramFiles directories.
 # Written to when Rescan enabled; used to create the next set of files
 $windirFullXml    = [System.IO.Path]::Combine($scanResultsDir, "Writable_Full_windir.xml")

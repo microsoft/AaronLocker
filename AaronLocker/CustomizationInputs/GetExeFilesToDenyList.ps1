@@ -3,7 +3,7 @@
 Script used by Create-Policies.ps1 to identify EXE files that should be disallowed by AppLocker for non-admin use. Can be edited if necessary.
 
 .DESCRIPTION
-This script outputs a list of file paths under %windir% that need to be specifically disallowed by whitelisting rules.
+This script outputs a list of file paths under %windir% that need to be specifically disallowed by AllowListing rules.
 The list of files is consumed by Create-Policies.ps1, which builds the necessary AppLocker rules to block them.
 You can edit this file as needed for your environment, although it is recommended that none of the programs
 identified in this script be removed.
@@ -15,11 +15,11 @@ http://www.leeholmes.com/blog/2017/03/17/detecting-and-preventing-powershell-dow
 #>
 
 # --------------------------------------------------------------------------------
-# Files used to bypass whitelisting:
+# Files used to bypass AllowListing:
 
-# Find the multiple instances of .NET executables that have been identified as whitelist bypasses.
+# Find the multiple instances of .NET executables that have been identified as AllowList bypasses.
 # Create-Policies.ps1 will remove redundant information.
-$dotnetProgramsToBlacklist =
+$dotnetProgramsToDenyList =
     "InstallUtil.exe", 
     "IEExec.exe", 
     "RegAsm.exe", 
@@ -27,7 +27,7 @@ $dotnetProgramsToBlacklist =
     "MSBuild.exe",
     "Microsoft.Workflow.Compiler.exe"
     
-$dotnetProgramsToBlacklist | ForEach-Object {
+$dotnetProgramsToDenyList | ForEach-Object {
     Get-ChildItem -Path $env:windir\Microsoft.NET -Recurse -Include $_ | ForEach-Object { $_.FullName }
 }
 
