@@ -277,6 +277,23 @@ $xRuleCollections = $xDocument.SelectNodes("//RuleCollection[@Type='Exe' or @Typ
 foreach($xRuleCollection in $xRuleCollections)
 {
     $PathsToAllow | foreach {
+        # If path is an existing directory and doesn't have trailing "\*" appended, fix it so that it does.
+        # If path is a file, don't append \*. If the path ends with \*, no need for further validation.
+        # If it doesn't end with \* but Get-Item can't identify it as a file or a directory, write a warning and accept it as is.
+        $pathToAllow = $_
+        if (!$pathToAllow.EndsWith("\*"))
+        {
+            $pathItem = Get-Item $pathToAllow -Force -ErrorAction SilentlyContinue
+            if ($pathItem -eq $null)
+            {
+                Write-Warning "Cannot verify path $pathItem; adding to rule set as is."
+            }
+            elseif ($pathItem -is [System.IO.DirectoryInfo])
+            {
+                Write-Warning "Appending `"\*`" to rule for $pathToAllow"
+                $pathToAllow = [System.IO.Path]::Combine($pathToAllow, "*")
+            }
+        }
         $elemRule = $xDocument.CreateElement("FilePathRule")
         $elemRule.SetAttribute("Action", "Allow")
         $elemRule.SetAttribute("UserOrGroupSid", "S-1-1-0")

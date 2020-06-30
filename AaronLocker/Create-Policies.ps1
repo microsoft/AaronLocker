@@ -228,25 +228,6 @@ if ( $Rescan -or ( ($AppLockerOrWDAC -in "Both","AppLocker") -and !(Test-Path($E
 # Get additional authorized safe paths from the script that produces that list 
 Write-Host "Get authorized safe paths for later processing..." -ForegroundColor Cyan
 $PathsToAllow = (& $ps1_GetSafePathsToAllow)
-$PathsToAllow | foreach {
-    # If path is an existing directory and doesn't have trailing "\*" appended, fix it so that it does.
-    # If path is a file, don't append \*. If the path ends with \*, no need for further validation.
-    # If it doesn't end with \* but Get-Item can't identify it as a file or a directory, write a warning and accept it as is.
-    $pathToAllow = $_
-    if (!$pathToAllow.EndsWith("\*"))
-    {
-        $pathItem = Get-Item $pathToAllow -Force -ErrorAction SilentlyContinue
-        if ($pathItem -eq $null)
-        {
-            Write-Warning "Cannot verify path $pathItem; adding to rule set as is."
-        }
-        elseif ($pathItem -is [System.IO.DirectoryInfo])
-        {
-            Write-Warning "Appending `"\*`" to rule for $pathToAllow"
-            $pathToAllow = [System.IO.Path]::Combine($pathToAllow, "*")
-        }
-    }
-}
 
 # Run the script that gets "unsafe" user-writable paths for later processing. Should come in as a sequence of hashtables.
 if ( !(Test-Path($ps1_UnsafePathsToBuildRulesFor)) )
