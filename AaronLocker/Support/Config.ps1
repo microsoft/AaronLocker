@@ -36,8 +36,8 @@ $ps1_TrustedSigners             = [System.IO.Path]::Combine($customizationInputs
 $ps1_TrustedSignersWDAC         = [System.IO.Path]::Combine($customizationInputsDir, "WDACTrustedSigners.ps1")
 $ps1_HashRuleData               = [System.IO.Path]::Combine($customizationInputsDir, "HashRuleData.ps1")
 $ps1_KnownAdmins                = [System.IO.Path]::Combine($customizationInputsDir, "KnownAdmins.ps1")
-$ps1_CreatePoliciesAppLocker    = [System.IO.Path]::Combine($rootDir, "Create-Policies-AppLocker.ps1")
-$ps1_CreatePoliciesWDAC         = [System.IO.Path]::Combine($rootDir, "Create-Policies-WDAC.ps1")
+$ps1_CreatePoliciesAppLocker    = [System.IO.Path]::Combine($supportDir, "Create-Policies-AppLocker.ps1")
+$ps1_CreatePoliciesWDAC         = [System.IO.Path]::Combine($supportDir, "Create-Policies-WDAC.ps1")
 
 # File prefixes for AppLocker and WDAC
 $rulesFileBase = "AppLockerRules-"
